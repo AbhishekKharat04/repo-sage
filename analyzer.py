@@ -351,7 +351,7 @@ class RepoAnalyzer:
         ]
         
         # Calculate time saved dynamically
-        time_saved = self.calculate_time_saved(signals, project_type, score)
+        time_saved, time_saved_breakdown = self.calculate_time_saved(signals, project_type, score)
 
         return {
             "score": score,
@@ -362,64 +362,65 @@ class RepoAnalyzer:
             "generated": generated,
             "next_actions": next_actions,
             "time_saved_hours": time_saved,
+            "time_saved_breakdown": time_saved_breakdown,
             "positioning": f"ShipSage turns a {project_type.lower()} into a reviewed DevOps starter kit, not a blind one-click deploy.",
         }
     
-    def calculate_time_saved(self, signals: dict, project_type: str, readiness_score: int) -> float:
-        """Calculate estimated time saved based on what's being generated."""
-        time_saved = 0.0
+    def calculate_time_saved(self, signals: dict, project_type: str, readiness_score: int) -> tuple[float, list]:
+        """
+        Calculate estimated time to manually write configs that ShipSage generates.
         
-        # Base time for each missing component (industry benchmarks)
-        component_times = {
-            "docker": 2.5,  # Multi-stage Dockerfile + optimization
-            "docker_compose": 1.5,  # Full compose with networks/volumes
-            "kubernetes": 6.0,  # Complete K8s manifests (deployment, service, ingress, HPA, configmap)
-            "ci": 4.0,  # GitHub Actions pipeline with multiple stages
-            "terraform": 8.0,  # AWS infrastructure (VPC, EKS, RDS, S3, etc.)
-            "monitoring": 3.5,  # ELK/Prometheus stack setup
-            "env_template": 0.5,  # Environment configuration
-            "nginx": 1.0,  # Reverse proxy configuration
+        HONEST METHODOLOGY:
+        - Only count time for configs ShipSage actually generates as starter templates
+        - These are STARTING POINTS, not production-ready — user still needs to review & customize
+        - We estimate ~50-60% of manual effort is saved (the boilerplate/research part)
+        - The rest (customization, testing, debugging) the user still does themselves
+        """
+        # Time to write each config FROM SCRATCH (realistic senior dev estimates)
+        config_times = {
+            "docker": 1.5,       # Dockerfile with multi-stage build
+            "docker_compose": 1.0,  # Compose with services/networks
+            "kubernetes": 3.0,   # K8s deployment + service + ingress + HPA
+            "ci": 2.0,          # GitHub Actions pipeline
+            "terraform": 4.0,   # Basic AWS infra (VPC, EKS, S3, ECR)
+            "monitoring": 2.0,  # ELK/Prometheus compose
+            "env_nginx": 0.5,   # Env template + nginx proxy
         }
         
-        # Add time for components we're generating
+        # Docker: always generated, but if repo already has it, savings are smaller
+        docker_time = 0.0
         if not signals.get("docker"):
-            time_saved += component_times["docker"]
-            time_saved += component_times["docker_compose"]
-        
-        if not signals.get("infra"):
-            time_saved += component_times["kubernetes"]
-            time_saved += component_times["terraform"]
-        
-        if not signals.get("ci"):
-            time_saved += component_times["ci"]
-        
-        if not signals.get("monitoring"):
-            time_saved += component_times["monitoring"]
-        
-        if not signals.get("env_template"):
-            time_saved += component_times["env_template"]
-        
-        # Always generate nginx config
-        time_saved += component_times["nginx"]
-        
-        # Add time for research and learning (varies by project complexity)
-        if "Full-Stack" in project_type or "Enterprise" in project_type:
-            time_saved += 3.0  # Complex projects need more research
+            docker_time = config_times["docker"] + config_times["docker_compose"]
         else:
-            time_saved += 1.5  # Simpler projects
+            docker_time = 0.5  # Still generate optimized version
         
-        # Add time for debugging and iterations (based on readiness)
-        if readiness_score < 40:
-            time_saved += 4.0  # Lots of debugging needed
-        elif readiness_score < 70:
-            time_saved += 2.5  # Some debugging
-        else:
-            time_saved += 1.0  # Minimal debugging
+        # K8s: always generated
+        k8s_time = config_times["kubernetes"] if not signals.get("infra") else 1.0
         
-        # Add time for documentation and best practices
-        time_saved += 1.5
+        # CI/CD: always generated
+        ci_time = config_times["ci"] if not signals.get("ci") else 0.5
         
-        return round(time_saved, 1)
+        # Terraform: always generated
+        tf_time = config_times["terraform"] if not signals.get("infra") else 1.0
+        
+        # Monitoring: always generated
+        elk_time = config_times["monitoring"] if not signals.get("monitoring") else 0.5
+        
+        # Env + Nginx: always generated
+        env_time = config_times["env_nginx"]
+        
+        total = docker_time + k8s_time + ci_time + tf_time + elk_time + env_time
+        
+        # Breakdown for chart: Docker, K8s, CI/CD, Terraform, ELK
+        breakdown = [
+            round(docker_time, 1),
+            round(k8s_time, 1),
+            round(ci_time, 1),
+            round(tf_time, 1),
+            round(elk_time, 1)
+        ]
+        
+        return round(total, 1), breakdown
 
     def generate_architecture(self, file_list: list) -> str:
         """Generate a text-based architecture diagram from file structure."""

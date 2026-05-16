@@ -77,6 +77,7 @@ class AnalyzeRequest(BaseModel):
     anthropic_api_key: str = ""
     ollama_model: str = "llama3"
     ollama_endpoint: str = "http://localhost:11434"
+    owner_id: str = ""
 
 
 @app.get("/")
@@ -183,7 +184,7 @@ async def analyze_repo(data: AnalyzeRequest):
         
         # Create session for collaboration
         session_manager = get_session_manager()
-        user_id = str(uuid.uuid4())  # Generate anonymous user ID
+        user_id = data.owner_id if data.owner_id else str(uuid.uuid4())
         session = await session_manager.create_session(
             repo_url=data.repo_url,
             owner_id=user_id,

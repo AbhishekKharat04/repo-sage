@@ -430,6 +430,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
       <div class="topbar-actions">
         <button class="btn-outline" onclick="toggleTheme()" id="dash-theme-btn"> Light Mode</button>
         <button class="btn-outline" onclick="downloadAllFiles()" style="background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.3);color:#10b981;"> Download All</button>
+        <button class="btn-outline" onclick="backToSetup()">← Back</button>
         <button class="btn-outline" onclick="location.reload()">+ New Project</button>
       </div>
     </header>
@@ -449,9 +450,9 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
             <div class="metric-sub">Production-ready files</div>
           </div>
           <div class="metric-card">
-            <div class="metric-title">Est. Time Saved</div>
-            <div class="metric-value" id="metric-time-saved">14h</div>
-            <div class="metric-sub">Manual setup equivalent</div>
+            <div class="metric-title">Manual Effort Equiv.</div>
+            <div class="metric-value" id="metric-time-saved">0h</div>
+            <div class="metric-sub">Time to write these configs by hand</div>
           </div>
           <div class="metric-card">
             <div class="metric-title">Readiness Score</div>
@@ -505,13 +506,13 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 
         <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr;">
           <div class="card">
-            <div class="card-title"><i></i> Time Saved by DevOps Stage</div>
+            <div class="card-title"><i></i> Manual Effort by Config (hours)</div>
             <div class="chart-container">
               <canvas id="timeSavedChart"></canvas>
             </div>
           </div>
           <div class="card">
-            <div class="card-title"><i></i> Infrastructure Complexity Score</div>
+            <div class="card-title"><i></i> DevOps Maturity Radar</div>
             <div class="chart-container">
               <canvas id="complexityChart"></canvas>
             </div>
@@ -521,12 +522,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
         <div class="card" style="margin-top: 24px;">
           <div class="card-title"><i></i> AI DevOps Recommendations</div>
           <div class="recs-grid" id="ai-recs">
-            <div class="rec-item"><div class="rec-icon"></div><div class="rec-title">Add Secrets Manager</div><div class="rec-desc">Use AWS Secrets Manager or HashiCorp Vault instead of .env files in production for better security.</div></div>
-            <div class="rec-item"><div class="rec-icon"></div><div class="rec-title">Enable APM</div><div class="rec-desc">Add Application Performance Monitoring (Datadog, New Relic) to track latency and error rates in real-time.</div></div>
-            <div class="rec-item"><div class="rec-icon"></div><div class="rec-title">Blue-Green Deploys</div><div class="rec-desc">Configure blue-green or canary deployments in your K8s setup for zero-downtime releases.</div></div>
-            <div class="rec-item"><div class="rec-icon"></div><div class="rec-title">Container Scanning</div><div class="rec-desc">Add Trivy or Snyk to your CI/CD pipeline to scan Docker images for vulnerabilities before deploy.</div></div>
-            <div class="rec-item"><div class="rec-icon"></div><div class="rec-title">Backup Strategy</div><div class="rec-desc">Set up automated database backups with point-in-time recovery using AWS RDS snapshots.</div></div>
-            <div class="rec-item"><div class="rec-icon"></div><div class="rec-title">CDN & Caching</div><div class="rec-desc">Add CloudFront CDN and Redis caching layer to reduce latency by 60% for static assets.</div></div>
+            <!-- Populated dynamically by renderRecommendations() -->
           </div>
         </div>
       </div>
@@ -867,11 +863,19 @@ async function analyze() {
     return;
   }
   
+  // Store owner ID for future sessions
+  if (!localStorage.getItem('shipsage_owner_id')) {
+    const ownerId = 'user_' + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem('shipsage_owner_id', ownerId);
+  }
+  const currentOwnerId = localStorage.getItem('shipsage_owner_id');
+
   // Build request payload
   const payload = {
     repo_url: url,
     github_token: githubToken,
-    ai_provider: aiProvider
+    ai_provider: aiProvider,
+    owner_id: currentOwnerId
   };
   
   // Add provider-specific credentials
@@ -908,28 +912,17 @@ async function analyze() {
     document.getElementById('dashboard-view').style.display = 'flex';
     
     // Init charts
-    initCharts();
+    initCharts(d);
     
     // Initialize collaboration if session_id is available
     if (d.session_id) {
       currentSessionId = d.session_id;
-      currentOwnerId = d.owner_id || localStorage.getItem('shipsage_owner_id');
-      
-      // Store owner ID for future sessions
-      if (!localStorage.getItem('shipsage_owner_id')) {
-        const ownerId = 'user_' + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem('shipsage_owner_id', ownerId);
-        currentOwnerId = ownerId;
-      }
-      
-      // Store current session
-      localStorage.setItem('shipsage_current_session', d.session_id);
-      
       initCollaboration(d.session_id);
-      
-      // Load project history
-      loadProjectHistory();
     }
+    
+    // Save to localStorage history & render sidebar
+    saveToLocalHistory(d);
+    renderProjectHistory();
     
   } catch(e) {
     errorEl.textContent = e.message || 'Something went wrong connecting to the server.';
@@ -940,49 +933,119 @@ async function analyze() {
   }
 }
 
-// Project History Management
+// Project History Management (localStorage-based for persistence across restarts)
 let currentSessionId = null;
 let currentOwnerId = null;
 
-async function loadProjectHistory() {
+function getLocalHistory() {
   try {
-    const ownerId = localStorage.getItem('shipsage_owner_id');
-    if (!ownerId) return;
-    
-    const response = await fetch(`/api/sessions?owner_id=${ownerId}&limit=20`);
-    if (!response.ok) return;
-    
-    const data = await response.json();
-    const sessions = data.sessions || [];
-    
-    const listEl = document.getElementById('project-history-list');
-    
-    if (sessions.length === 0) {
-      listEl.innerHTML = '<div class="project-history-empty">No projects yet. Analyze a repository to get started!</div>';
-      return;
-    }
-    
-    listEl.innerHTML = sessions.map(session => {
-      const summary = session.summary || {};
-      const isActive = session.id === currentSessionId;
-      
-      return `
-        <div class="project-item ${isActive ? 'active' : ''}" onclick="loadProject('${session.id}')">
-          <div class="project-item-name">
-            📦 ${summary.repo_name || 'Unknown'}
-            <span class="project-item-delete" onclick="event.stopPropagation(); deleteProject('${session.id}')">×</span>
-          </div>
-          <div class="project-item-meta">
-            <span class="project-item-tag">${summary.project_type || 'Unknown'}</span>
-            ${(summary.stack || []).map(tech => `<span class="project-item-tag">${tech}</span>`).join('')}
-            <span style="margin-left: auto; font-size: 10px;">${summary.created_ago || ''}</span>
-          </div>
-        </div>
-      `;
-    }).join('');
-  } catch (error) {
-    console.error('Failed to load project history:', error);
+    return JSON.parse(localStorage.getItem('shipsage_history') || '[]');
+  } catch { return []; }
+}
+
+function saveToLocalHistory(d) {
+  try {
+    const history = getLocalHistory();
+    // Store ONLY summary data - NOT full configs (too large for localStorage)
+    const entry = {
+      id: d.session_id || Date.now().toString(),
+      repo: d.repo,
+      branch: d.branch,
+      project_type: d.project_type,
+      stack: (d.stack || []).slice(0, 5),
+      readiness_score: d.readiness?.score || 0,
+      readiness_status: d.readiness?.status || '',
+      time_saved: d.readiness?.time_saved_hours || 0,
+      time_saved_breakdown: d.readiness?.time_saved_breakdown || [],
+      signals: d.readiness?.signals || {},
+      analyzed_files: d.analyzed_files || 0,
+      analysis_time: d.analysis_time || 0,
+      ai_powered: d.ai_powered || false,
+      analyzed_at: new Date().toISOString(),
+      // Store the repo_url so we can re-analyze
+      repo_url: `https://github.com/${d.repo}`
+    };
+    // Remove duplicate if same repo
+    const filtered = history.filter(h => h.repo !== entry.repo);
+    filtered.unshift(entry); // newest first
+    // Keep max 20
+    localStorage.setItem('shipsage_history', JSON.stringify(filtered.slice(0, 20)));
+  } catch(e) {
+    console.warn('Failed to save history:', e);
   }
+}
+
+function renderProjectHistory() {
+  const history = getLocalHistory();
+  const listEl = document.getElementById('project-history-list');
+  if (!listEl) return;
+  
+  if (history.length === 0) {
+    listEl.innerHTML = '<div class="project-history-empty">No projects yet. Analyze a repository to get started!</div>';
+    return;
+  }
+  
+  listEl.innerHTML = history.map((h, idx) => {
+    const isActive = h.repo === globalData?.repo;
+    const timeAgo = getTimeAgo(h.analyzed_at);
+    return `
+      <div class="project-item ${isActive ? 'active' : ''}" onclick="loadLocalProject(${idx})">
+        <div class="project-item-name">
+          📦 ${(h.repo || 'Unknown').split('/').pop()}
+          <span class="project-item-delete" onclick="event.stopPropagation(); deleteLocalProject(${idx})">×</span>
+        </div>
+        <div class="project-item-meta">
+          <span class="project-item-tag">${h.project_type || 'Unknown'}</span>
+          ${(h.stack || []).map(t => '<span class="project-item-tag">' + t + '</span>').join('')}
+          <span style="margin-left: auto; font-size: 10px;">${timeAgo}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function getTimeAgo(iso) {
+  try {
+    const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return Math.floor(diff / 86400) + 'd ago';
+  } catch { return ''; }
+}
+
+function loadLocalProject(idx) {
+  const history = getLocalHistory();
+  const entry = history[idx];
+  if (!entry) return;
+  
+  // Re-analyze from server (we only store summaries, not full data)
+  document.getElementById('repoUrl').value = entry.repo_url || `https://github.com/${entry.repo}`;
+  
+  // Show setup view briefly, then auto-analyze
+  document.getElementById('setup-view').style.display = 'flex';
+  document.getElementById('dashboard-view').style.display = 'none';
+  
+  // Auto-trigger analysis
+  analyze();
+}
+
+function deleteLocalProject(idx) {
+  if (!confirm('Remove this project from history?')) return;
+  const history = getLocalHistory();
+  const removed = history.splice(idx, 1);
+  localStorage.setItem('shipsage_history', JSON.stringify(history));
+  // If deleted the current project, go back to setup
+  if (removed[0]?.repo === globalData?.repo) {
+    backToSetup();
+  } else {
+    renderProjectHistory();
+  }
+}
+
+function backToSetup() {
+  document.getElementById('setup-view').style.display = 'flex';
+  document.getElementById('dashboard-view').style.display = 'none';
 }
 
 async function loadProject(sessionId) {
@@ -1008,7 +1071,7 @@ async function loadProject(sessionId) {
     await loadProjectHistory();
     
     // Reinit charts
-    initCharts();
+    initCharts(data);
     
     // Show dashboard if not already visible
     document.getElementById('setup-view').style.display = 'none';
@@ -1051,47 +1114,11 @@ async function deleteProject(sessionId) {
   }
 }
 
-async function clearProjectHistory() {
-  if (!confirm('Are you sure you want to clear all project history? This cannot be undone.')) {
-    return;
-  }
-  
-  try {
-    const ownerId = localStorage.getItem('shipsage_owner_id');
-    if (!ownerId) return;
-    
-    const response = await fetch(`/api/sessions?owner_id=${ownerId}&limit=100`);
-    if (!response.ok) return;
-    
-    const data = await response.json();
-    const sessions = data.sessions || [];
-    
-    // Delete all sessions
-    for (const session of sessions) {
-      await fetch(`/api/sessions/${session.id}`, { method: 'DELETE' });
-    }
-    
-    // Reload the page
-    location.reload();
-  } catch (error) {
-    console.error('Failed to clear history:', error);
-    alert('Failed to clear history: ' + error.message);
-  }
+function clearProjectHistory() {
+  if (!confirm('Clear all project history? This cannot be undone.')) return;
+  localStorage.removeItem('shipsage_history');
+  renderProjectHistory();
 }
-
-// Load project history when dashboard is shown
-window.addEventListener('load', () => {
-  // Check if we have a stored session to restore
-  const storedSession = localStorage.getItem('shipsage_current_session');
-  if (storedSession && document.getElementById('dashboard-view').style.display === 'flex') {
-    loadProject(storedSession);
-  }
-  
-  // Load project history if dashboard is visible
-  if (document.getElementById('dashboard-view').style.display === 'flex') {
-    loadProjectHistory();
-  }
-});
 
 function renderDashboard(d) {
   // Topbar
@@ -1117,8 +1144,8 @@ function renderDashboard(d) {
   document.getElementById('metric-time').textContent = `Analyzed in ${d.analysis_time}s`;
   
   // Time saved metric
-  const timeSaved = d.readiness?.time_saved_hours || 14;
-  document.getElementById('metric-time-saved').textContent = `${timeSaved}h`;
+  const timeSaved = d.readiness?.time_saved_hours || 0;
+  animateValue(document.getElementById('metric-time-saved'), timeSaved, 'h');
   
   renderReadiness(d.readiness);
   
@@ -1143,6 +1170,9 @@ function renderDashboard(d) {
   if (d.cost_estimate) {
     renderCostEstimate(d.cost_estimate);
   }
+  
+  // Render dynamic AI recommendations
+  renderRecommendations(d.readiness?.signals || {}, d.stack || [], d.project_type || '');
   
   // Render executive summary
   if (d.executive_summary) {
@@ -1268,9 +1298,24 @@ function renderReadiness(readiness) {
   document.getElementById('blocker-list').innerHTML = blockers.map(item => `<div class="action-item blocker-item">${item}</div>`).join('');
   document.getElementById('next-actions').innerHTML = (r.next_actions || []).map(item => `<div class="action-item">${item}</div>`).join('');
 }
-function initCharts() {
+function initCharts(d) {
   Chart.defaults.color = () => isLightMode ? '#6b7280' : '#9ca3af';
   Chart.defaults.font.family = 'Inter';
+  
+  if (timeChartInst) timeChartInst.destroy();
+  if (complexityChartInst) complexityChartInst.destroy();
+
+  const timeBreakdown = d?.readiness?.time_saved_breakdown || [2, 4, 3, 3.5, 1.5];
+  const signals = d?.readiness?.signals || {};
+  
+  // Color code: green = repo already has it (low effort), orange = needs generation (high effort)
+  const barColors = [
+    signals.docker   ? 'rgba(16,185,129,0.7)' : '#3b82f6',  // Docker
+    signals.infra    ? 'rgba(16,185,129,0.7)' : '#8b5cf6',  // K8s
+    signals.ci       ? 'rgba(16,185,129,0.7)' : '#f59e0b',  // CI/CD
+    signals.infra    ? 'rgba(16,185,129,0.7)' : '#ef4444',  // Terraform
+    signals.monitoring ? 'rgba(16,185,129,0.7)' : '#ec4899', // ELK
+  ];
   
   const ctxTime = document.getElementById('timeSavedChart').getContext('2d');
   timeChartInst = new Chart(ctxTime, {
@@ -1278,31 +1323,51 @@ function initCharts() {
     data: {
       labels: ['Docker', 'K8s', 'CI/CD', 'Terraform', 'ELK'],
       datasets: [{
-        label: 'Hours Saved',
-        data: [2, 4, 3, 3.5, 1.5],
-        backgroundColor: '#3b82f6',
-        borderRadius: 4
+        label: 'Hours',
+        data: timeBreakdown,
+        backgroundColor: barColors,
+        borderRadius: 6
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterLabel: function(ctx) {
+              const keys = ['docker', 'infra', 'ci', 'infra', 'monitoring'];
+              const key = keys[ctx.dataIndex];
+              return signals[key] ? '✓ Already present in repo' : '⚠ Missing — generated by ShipSage';
+            }
+          }
+        }
+      },
       scales: {
-        y: { beginAtZero: true, grid: { color: () => isLightMode ? '#e5e7eb' : '#374151' } },
+        y: { beginAtZero: true, grid: { color: () => isLightMode ? '#e5e7eb' : '#374151' }, title: { display: true, text: 'Hours', font: { size: 11 } } },
         x: { grid: { display: false } }
       }
     }
   });
 
+  // Build dynamic radar from actual repo signals (using signals defined above)
+  const radarData = [
+    (signals.docker ? 40 : 0) + (signals.infra ? 40 : 0) + 20,       // Networking (docker+infra)
+    (signals.env_template ? 50 : 0) + (signals.docs ? 30 : 0) + 20,  // Config Mgmt
+    (signals.docker ? 50 : 0) + (signals.health ? 30 : 0) + 20,      // Compute
+    (signals.security ? 50 : 0) + (signals.secrets ? 30 : 0) + 20,    // Security
+    (signals.monitoring ? 50 : 0) + (signals.ci ? 30 : 0) + 20,       // Observability
+  ];
+
   const ctxComp = document.getElementById('complexityChart').getContext('2d');
   complexityChartInst = new Chart(ctxComp, {
     type: 'radar',
     data: {
-      labels: ['Networking', 'Storage', 'Compute', 'Security', 'Observability'],
+      labels: ['Networking', 'Config Mgmt', 'Compute', 'Security', 'Observability'],
       datasets: [{
-        label: 'Complexity Index',
-        data: [80, 60, 90, 70, 85],
+        label: 'Maturity Score',
+        data: radarData,
         backgroundColor: 'rgba(139, 92, 246, 0.2)',
         borderColor: '#8b5cf6',
         pointBackgroundColor: '#8b5cf6',
@@ -1314,6 +1379,8 @@ function initCharts() {
       plugins: { legend: { display: false } },
       scales: {
         r: {
+          min: 0,
+          max: 100,
           angleLines: { color: () => isLightMode ? '#e5e7eb' : '#374151' },
           grid: { color: () => isLightMode ? '#e5e7eb' : '#374151' },
           ticks: { display: false },
@@ -1536,9 +1603,93 @@ function renderExecutiveSummary(exec) {
   }
 }
 
+function renderRecommendations(signals, stack, projectType) {
+  // Build recommendations dynamically based on what the repo actually needs
+  const recs = [];
+  const stackStr = stack.join(' ').toLowerCase();
+  
+  // Missing: tests
+  if (!signals.tests) {
+    recs.push({ icon: '🧪', title: 'Add Test Suite', desc: `No tests detected. Add ${stackStr.includes('python') ? 'pytest' : stackStr.includes('javascript') ? 'Jest/Mocha' : 'unit tests'} to catch bugs before deployment.` });
+  }
+  
+  // Missing: CI/CD
+  if (!signals.ci) {
+    recs.push({ icon: '⚙️', title: 'Setup CI/CD Pipeline', desc: 'No CI/CD workflow found. Use the generated GitHub Actions pipeline to automate build, test, and deploy on every push.' });
+  }
+  
+  // Missing: Docker
+  if (!signals.docker) {
+    recs.push({ icon: '🐳', title: 'Containerize with Docker', desc: 'No Docker configuration found. Use the generated Dockerfile for consistent builds across dev, staging, and production.' });
+  }
+  
+  // Missing: env template
+  if (!signals.env_template) {
+    recs.push({ icon: '🔐', title: 'Create .env.template', desc: 'No environment template found. Document all required env variables so new developers can set up quickly.' });
+  }
+  
+  // Missing: monitoring
+  if (!signals.monitoring) {
+    recs.push({ icon: '📊', title: 'Add Monitoring Stack', desc: 'No monitoring detected. Use the generated ELK/Prometheus config to track errors, latency, and system health.' });
+  }
+  
+  // Missing: security
+  if (!signals.security) {
+    recs.push({ icon: '🛡️', title: 'Add Security Scanning', desc: `Add ${stackStr.includes('docker') ? 'Trivy for container scanning and ' : ''}Snyk or Dependabot for dependency vulnerability checks in your CI pipeline.` });
+  }
+  
+  // Missing: secrets management
+  if (!signals.secrets) {
+    recs.push({ icon: '🔑', title: 'Secrets Management', desc: 'No secrets manager detected. Use AWS Secrets Manager, HashiCorp Vault, or GitHub Encrypted Secrets instead of .env files in production.' });
+  }
+  
+  // Missing: infra as code
+  if (!signals.infra) {
+    recs.push({ icon: '🏗️', title: 'Infrastructure as Code', desc: 'No IaC detected. Use the generated Terraform and K8s manifests to version-control your infrastructure alongside your code.' });
+  }
+  
+  // Missing: health checks
+  if (!signals.health) {
+    recs.push({ icon: '💓', title: 'Add Health Endpoint', desc: `Add a /health endpoint that returns JSON status. ${stackStr.includes('fastapi') ? 'FastAPI makes this trivial with a simple route.' : stackStr.includes('express') ? 'Express: app.get("/health", ...)' : 'Essential for K8s liveness/readiness probes.'}` });
+  }
+  
+  // Stack-specific recommendations (always show some even if everything passes)
+  if (stackStr.includes('react') || stackStr.includes('next') || stackStr.includes('vue')) {
+    recs.push({ icon: '⚡', title: 'CDN & Edge Caching', desc: 'Frontend app detected. Deploy static assets via CloudFront CDN or Vercel Edge to reduce latency by 60-80% globally.' });
+  }
+  if (stackStr.includes('python') || stackStr.includes('fastapi') || stackStr.includes('django')) {
+    recs.push({ icon: '🐍', title: 'Python Production Server', desc: 'Use Gunicorn with Uvicorn workers behind Nginx for production. The generated Dockerfile already configures this.' });
+  }
+  if (stackStr.includes('express') || stackStr.includes('node') || stackStr.includes('javascript')) {
+    recs.push({ icon: '📦', title: 'Node.js Best Practices', desc: 'Use PM2 or cluster mode for production. Enable compression middleware and implement rate limiting on API endpoints.' });
+  }
+  
+  // If repo is very well-configured, give optimization recommendations
+  if (signals.tests && signals.ci && signals.docker) {
+    recs.push({ icon: '🚀', title: 'Blue-Green Deployments', desc: 'Your repo has good CI/CD foundations. Consider blue-green or canary deployments for zero-downtime releases.' });
+  }
+  
+  // Take top 6
+  const topRecs = recs.slice(0, 6);
+  
+  const recsEl = document.getElementById('ai-recs');
+  if (!recsEl || topRecs.length === 0) return;
+  
+  recsEl.innerHTML = topRecs.map(r => `
+    <div class="rec-item">
+      <div class="rec-icon">${r.icon}</div>
+      <div class="rec-title">${r.title}</div>
+      <div class="rec-desc">${r.desc}</div>
+    </div>
+  `).join('');
+}
+
 document.getElementById('repoUrl').addEventListener('keydown', e => {
   if(e.key === 'Enter') analyze();
 });
+
+// Render history on page load
+window.addEventListener('load', () => renderProjectHistory());
 </script>
 </body>
 </html>
