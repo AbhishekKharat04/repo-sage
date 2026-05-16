@@ -116,6 +116,15 @@ class RepoAnalyzer:
                         f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1",
                         headers=headers
                     )
+                    
+                    # If token is invalid (401), retry without token for public repos
+                    if resp.status_code == 401 and "Authorization" in headers:
+                        del headers["Authorization"]
+                        resp = await client.get(
+                            f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1",
+                            headers=headers
+                        )
+
                     if resp.status_code == 200:
                         self.offline_mode = False
                         return resp.json().get('tree', []), branch
@@ -140,6 +149,15 @@ class RepoAnalyzer:
                     f"https://api.github.com/repos/{owner}/{repo}/contents/{path}",
                     headers=headers
                 )
+                
+                # If token is invalid (401), retry without token
+                if resp.status_code == 401 and "Authorization" in headers:
+                    del headers["Authorization"]
+                    resp = await client.get(
+                        f"https://api.github.com/repos/{owner}/{repo}/contents/{path}",
+                        headers=headers
+                    )
+
                 if resp.status_code == 200:
                     data = resp.json()
                     size = data.get('size', 0)
