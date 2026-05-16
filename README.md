@@ -1,85 +1,85 @@
-# ShipSage 🚀
+# ShipSage
 
-> **From repo to production-ready infrastructure — in seconds.**
+> From GitHub repo to reviewed DevOps starter kit in minutes.
 
-AI-powered DevOps pipeline generator that analyzes any public GitHub repository and generates production-ready Dockerfile, docker-compose, Kubernetes manifests, CI/CD pipelines, AWS Terraform, ELK monitoring stack, and environment configs.
+ShipSage is an AI-assisted DevOps readiness and pipeline generator for teams that need to understand whether a repository is ready for production deployment. Paste a public GitHub repository URL and ShipSage analyzes the stack, scores production readiness, flags blockers, and generates Docker, Kubernetes, CI/CD, Terraform, monitoring, and environment configuration files.
 
-Built for the **IBM Bob Hackathon 2026** · Powered by **IBM watsonx Granite**
+Built for the IBM Bob Hackathon 2026. Powered by IBM watsonx Granite when credentials are provided, with a smart rule-based fallback so the demo still works without API keys.
 
----
+## The Problem
 
-## 🎯 The Problem
+Small teams often delay deployment because every new repository needs the same painful checklist: container setup, CI/CD, secrets, infrastructure, health checks, monitoring, and cloud configuration. Copy-pasting templates is fast, but risky. One-click deploy promises are attractive, but teams still need to know what is missing before trusting generated infrastructure.
 
-Developers spend **2-3 days** writing DevOps boilerplate for every new project — Dockerfiles, K8s manifests, CI/CD pipelines, AWS infrastructure. It's repetitive, error-prone, and keeps engineers away from building actual features.
+ShipSage helps answer the practical question: "What do I need before this repo can safely move toward production?"
 
-**ShipSage automates this entire process in 30 seconds.**
+## What ShipSage Does
 
-## 💡 What It Generates
+1. Analyzes a public GitHub repository.
+2. Detects language, framework, project type, key files, and repo structure.
+3. Scores DevOps readiness using production signals such as tests, CI/CD, Docker, docs, env templates, health checks, and infrastructure code.
+4. Shows deployment blockers and next actions.
+5. Generates a reviewed starter kit for common deployment assets.
 
-| Output | Technologies |
-|--------|-------------|
-| 🐳 **Dockerfile** | Multi-stage builds, optimized for detected language |
-| 🐙 **docker-compose.yml** | App + PostgreSQL/MongoDB/Redis auto-detected |
-| ☸️ **Kubernetes Manifests** | Deployment, Service, Ingress, ConfigMap, HPA, Secrets |
-| ⚡ **CI/CD Pipeline** | GitHub Actions → ECR → EKS deploy |
-| ☁️ **AWS Terraform** | VPC, ECR, EKS, S3, RDS/DocumentDB, Security Groups |
-| 📊 **ELK + Monitoring** | Elasticsearch, Logstash, Kibana, Prometheus, Grafana |
-| 🔐 **Environment Config** | .env template, Nginx reverse proxy, Airflow DAG |
+## Generated Assets
 
-## 🛠️ Tech Stack
+| Output | Purpose |
+| --- | --- |
+| Dockerfile | Multi-stage app container scaffold |
+| docker-compose.yml | Local app and detected service orchestration |
+| Kubernetes manifests | Deployment, service, ingress, config, secrets, and HPA |
+| GitHub Actions pipeline | Build, test, push image, and deploy workflow |
+| AWS Terraform | VPC, ECR, EKS, S3, and database scaffolding |
+| Monitoring stack | Prometheus, Grafana, Elasticsearch, Logstash, and Kibana |
+| Env and Nginx config | Environment template and reverse proxy starter |
+
+## Why This Is Useful
+
+ShipSage is not a blind one-click deployment button. It is a DevOps copilot that gives teams a starting point and tells them what still needs review. That makes it useful for:
+
+- Developers shipping side projects or MVPs
+- Student teams preparing hackathon demos
+- Startups standardizing deployment basics
+- DevOps learners who want to understand production building blocks
+- Engineering teams onboarding a new repo
+
+## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| **Backend** | Python + FastAPI |
-| **Frontend** | Vanilla HTML/CSS/JS with glassmorphism design |
-| **AI Engine** | IBM watsonx Granite (with smart rule-based fallback) |
-| **API** | GitHub REST API (public repo analysis) |
-| **Generates** | Docker, Kubernetes, Terraform, GitHub Actions, ELK, Nginx, Airflow |
-| **Built With** | IBM Bob IDE |
+| --- | --- |
+| Backend | Python, FastAPI |
+| Frontend | Vanilla HTML, CSS, JavaScript |
+| AI Engine | IBM watsonx Granite with rule-based fallback |
+| Repo Analysis | GitHub REST API |
+| Generated Targets | Docker, Kubernetes, GitHub Actions, AWS Terraform, ELK, Nginx |
 
-## 🚀 Getting Started
+## Getting Started
 
 ```bash
 git clone https://github.com/AbhishekKharat04/repo-sage.git
 cd repo-sage
 pip install -r requirements.txt
 python main.py
-# Open http://localhost:8000
 ```
 
-## 🤖 IBM watsonx (Optional)
+Open `http://localhost:8000` and paste a public GitHub repository URL.
 
-Enter your IBM Cloud API Key and watsonx Project ID in the UI for AI-enhanced analysis. Without credentials, ShipSage uses smart rule-based generation that detects 20+ languages/frameworks.
+## IBM watsonx Credentials
 
-## 📁 Project Structure
+IBM credentials are optional. If you provide an IBM Cloud API key and watsonx Project ID, ShipSage uses Granite for deeper analysis. Without credentials, it still detects stack signals and generates the readiness report using deterministic rules.
 
-```
+## Project Structure
+
+```text
 repo-sage/
-├── main.py              # FastAPI server
-├── analyzer.py          # GitHub repo analyzer + stack detection
-├── generators.py        # DevOps config generators (Docker, K8s, AWS, etc.)
-├── templates/
-│   └── index.html       # Premium dark-themed UI
-├── requirements.txt
-├── bob_sessions/        # IBM Bob IDE session evidence
-├── FEATURES.md
-├── SETUP.md
-└── README.md
+  main.py              FastAPI server and API routes
+  analyzer.py          GitHub repo analyzer, stack detection, readiness scoring
+  generators.py        Docker, Kubernetes, CI/CD, Terraform, monitoring generators
+  templates/index.html SaaS-style dashboard UI
+  requirements.txt
+  FEATURES.md
+  SETUP.md
 ```
 
-## 🏆 Why ShipSage
+## Positioning
 
-- ✅ **Unique concept** — no other hackathon project generates full DevOps pipelines
-- ✅ **Real IBM watsonx integration** — uses Granite-13b-instruct-v2
-- ✅ **Massive B2B value** — saves 2-3 days of DevOps setup per project
-- ✅ **7 production-ready outputs** — Docker, K8s, CI/CD, AWS, ELK, Nginx, Airflow
-- ✅ **Works without API keys** — smart fallback ensures demo always works
-- ✅ **Premium UI** — glassmorphism, gradient animations, responsive design
-
-## 🤝 Team
-
-Built by **Team ShipSage** — Abhishek Kharat & Pratham Panchmukh
-
----
-
-*Built with 🚀 for IBM Bob Hackathon 2026 · Powered by IBM watsonx*
+Existing tools can generate infrastructure snippets. ShipSage focuses on the missing product layer: explaining whether the repo is ready, what is risky, what was generated, and what the user should do next.

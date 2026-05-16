@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>ShipSage — AI DevOps Dashboard</title>
+<title>ShipSage  AI DevOps Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="/templates/collaboration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
 <style>
@@ -161,12 +162,43 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 .card-title { font-size: 16px; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 
 /* Pipeline Visualizer */
-.pipeline-flow { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; }
-.pipe-node { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100px; }
-.pipe-icon { width: 56px; height: 56px; background: var(--bg); border: 2px solid var(--border); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 24px; z-index: 2; position: relative; transition: 0.3s; }
-.pipe-icon.active { border-color: var(--primary); box-shadow: 0 0 20px rgba(59,130,246,0.2); }
-.pipe-label { font-size: 12px; font-weight: 600; text-align: center; }
-.pipe-line { flex: 1; height: 2px; background: var(--border); position: relative; top: -14px; }
+.pipeline-flow { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; flex-wrap: wrap; gap: 12px; }
+.pipe-node { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 100px; flex: 1; cursor: pointer; transition: transform 0.2s; }
+.pipe-node:hover { transform: translateY(-4px); }
+.pipe-node.active .pipe-icon-wrapper { border-color: var(--success); box-shadow: 0 0 20px rgba(16,185,129,0.3); }
+.pipe-node.missing .pipe-icon-wrapper { border-color: var(--warning); opacity: 0.6; }
+.pipe-node.recommended .pipe-icon-wrapper { border-color: var(--primary); }
+.pipe-icon-wrapper { width: 64px; height: 64px; background: var(--bg); border: 3px solid var(--border); border-radius: 16px; display: flex; align-items: center; justify-content: center; position: relative; transition: 0.3s; }
+.pipe-icon-emoji { font-size: 28px; }
+.pipe-status-badge { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; background: var(--success); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: white; border: 2px solid var(--panel); }
+.pipe-node.missing .pipe-status-badge { background: var(--warning); }
+.pipe-node.recommended .pipe-status-badge { background: var(--primary); }
+.pipe-label { font-size: 13px; font-weight: 700; text-align: center; color: var(--text); }
+.pipe-tools { font-size: 11px; color: var(--text-muted); text-align: center; line-height: 1.3; }
+.pipe-time { font-size: 10px; color: var(--text-muted); background: var(--bg); padding: 2px 8px; border-radius: 4px; }
+.pipe-line { flex: 0 0 40px; height: 3px; background: linear-gradient(90deg, var(--border) 0%, var(--border) 50%, transparent 50%, transparent 100%); background-size: 8px 3px; position: relative; top: -30px; }
+
+/* Config Usage Cards */
+.config-usage-card { background: linear-gradient(135deg, rgba(59,130,246,0.05) 0%, rgba(139,92,246,0.05) 100%); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+.usage-header { display: flex; gap: 16px; align-items: start; margin-bottom: 20px; }
+.usage-icon { font-size: 36px; flex-shrink: 0; }
+.usage-title { font-size: 14px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.usage-desc { font-size: 15px; line-height: 1.6; color: var(--text); }
+.usage-steps { background: var(--bg); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.usage-step-title { font-size: 13px; font-weight: 700; color: var(--primary); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.usage-step { display: flex; align-items: start; gap: 12px; padding: 8px 0; font-size: 14px; line-height: 1.6; }
+.usage-step code { background: var(--panel); padding: 2px 8px; border-radius: 4px; font-family: 'Fira Code', monospace; font-size: 13px; color: var(--primary); }
+.step-num { background: var(--primary); color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.usage-next { font-size: 13px; line-height: 1.6; padding: 12px; background: var(--bg); border-left: 3px solid var(--success); border-radius: 6px; margin-bottom: 12px; }
+.usage-next strong { color: var(--success); }
+.usage-details { margin-top: 12px; }
+.usage-details summary { cursor: pointer; font-size: 13px; font-weight: 600; padding: 10px 12px; background: var(--bg); border-radius: 6px; list-style: none; display: flex; align-items: center; gap: 8px; transition: 0.2s; }
+.usage-details summary:hover { background: var(--panel-hover); }
+.usage-details summary::-webkit-details-marker { display: none; }
+.usage-details[open] summary { margin-bottom: 12px; }
+.usage-details ul { list-style: none; padding: 0; margin: 0; }
+.usage-details li { padding: 8px 12px; font-size: 13px; line-height: 1.6; border-left: 2px solid var(--border); margin-left: 12px; margin-bottom: 8px; }
+.usage-details li:before { content: "•"; color: var(--primary); font-weight: 700; margin-right: 8px; }
 .pipe-line::after { content: ''; position: absolute; top: 0; left: 0; height: 100%; width: 100%; background: linear-gradient(90deg, transparent, var(--primary), transparent); animation: flow 2s infinite linear; }
 @keyframes flow { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
 
@@ -201,7 +233,42 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 .md-prose pre code { background: transparent; border: none; padding: 0; color: inherit; }
 .md-prose blockquote { border-left: 4px solid var(--primary); padding-left: 16px; margin-left: 0; color: var(--text-muted); font-style: italic; }
 
+
+.readiness-layout { display: grid; grid-template-columns: 320px 1fr; gap: 24px; margin-bottom: 24px; }
+.score-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+.score-ring { width: 160px; height: 160px; border-radius: 50%; margin: 6px auto 20px; display: grid; place-items: center; background: conic-gradient(var(--success) calc(var(--score) * 1%), var(--border) 0); position: relative; }
+.score-ring::before { content: ''; position: absolute; inset: 12px; border-radius: 50%; background: var(--panel); }
+.score-ring strong { position: relative; font-size: 40px; line-height: 1; }
+.score-status { text-align: center; font-size: 18px; font-weight: 800; margin-bottom: 8px; }
+.score-copy { color: var(--text-muted); font-size: 13px; line-height: 1.6; text-align: center; }
+.check-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.check-item { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; gap: 10px; align-items: flex-start; }
+.check-mark { width: 24px; height: 24px; border-radius: 999px; display: grid; place-items: center; flex: 0 0 auto; font-size: 13px; font-weight: 800; }
+.check-mark.pass { background: rgba(16,185,129,0.16); color: var(--success); }
+.check-mark.fail { background: rgba(245,158,11,0.16); color: var(--warning); }
+.check-title { font-size: 13px; font-weight: 800; margin-bottom: 2px; }
+.check-desc { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+.action-list { display: grid; gap: 10px; }
+.action-item { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text-muted); font-size: 13px; line-height: 1.45; }
+.blocker-item { border-color: rgba(245,158,11,0.35); background: rgba(245,158,11,0.08); color: var(--text); }
+@media (max-width: 1024px) { .readiness-layout { grid-template-columns: 1fr; } .check-grid { grid-template-columns: 1fr; } }
 .theme-toggle-wrapper { position: absolute; top: 20px; right: 20px; }
+
+/* Project History Styles */
+.project-history { padding: 12px; border-top: 1px solid var(--border); max-height: 300px; overflow-y: auto; }
+.project-history-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; margin-bottom: 8px; }
+.project-history-title { font-size: 11px; font-weight: 700; color: #4b5563; text-transform: uppercase; letter-spacing: 1px; }
+.project-history-clear { font-size: 11px; color: var(--primary); cursor: pointer; font-weight: 600; }
+.project-history-clear:hover { text-decoration: underline; }
+.project-item { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; transition: 0.2s; }
+.project-item:hover { background: var(--panel-hover); border-color: var(--primary); }
+.project-item.active { background: rgba(59, 130, 246, 0.1); border-color: var(--primary); }
+.project-item-name { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.project-item-meta { font-size: 11px; color: var(--text-muted); display: flex; gap: 8px; flex-wrap: wrap; }
+.project-item-tag { background: var(--panel); padding: 2px 6px; border-radius: 4px; font-size: 10px; }
+.project-item-delete { float: right; color: var(--text-muted); font-size: 16px; padding: 0 4px; }
+.project-item-delete:hover { color: #ef4444; }
+.project-history-empty { text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px; }
 
 @media (max-width: 1024px) {
   .dashboard-grid { grid-template-columns: 1fr; }
@@ -222,13 +289,13 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 <!-- SETUP VIEW -->
 <div id="setup-view">
   <div class="theme-toggle-wrapper">
-    <button class="btn-outline" onclick="toggleTheme()" id="setup-theme-btn">☀️ Light Mode</button>
+    <button class="btn-outline" onclick="toggleTheme()" id="setup-theme-btn"> Light Mode</button>
   </div>
   <div class="setup-card">
     <div class="setup-header">
-      <div class="setup-logo">🚀</div>
+      <div class="setup-logo"></div>
       <h1>Ship<span>Sage</span></h1>
-      <p>AI-Powered DevOps Pipeline Generator</p>
+      <p>AI DevOps Readiness & Pipeline Generator</p>
     </div>
     
     <div class="input-group">
@@ -239,17 +306,63 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
     </div>
     
     <div class="input-group">
-      <label>IBM watsonx Credentials (Optional)</label>
+      <label>GitHub Token (Optional - for private repos)</label>
+      <div class="input-wrapper">
+        <input type="password" id="githubToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off"/>
+      </div>
+      <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">
+        💡 Required for private repositories. <a href="https://github.com/settings/tokens" target="_blank" style="color: var(--primary);">Generate token</a> with 'repo' scope.
+      </div>
+    </div>
+    
+    <div class="input-group">
+      <label>AI Provider</label>
+      <select id="aiProvider" onchange="toggleAICredentials()" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; color: var(--text); font-size: 14px; font-family: inherit; outline: none;">
+        <option value="watsonx">🔷 IBM watsonx Granite (Enterprise)</option>
+        <option value="openai">🤖 OpenAI GPT-4 ($0.01/1k tokens)</option>
+        <option value="anthropic">🧠 Anthropic Claude ($0.003/1k tokens)</option>
+        <option value="ollama">💻 Ollama (Local - Free)</option>
+        <option value="rule-based">⚡ Rule-based (Fast - Free)</option>
+      </select>
+    </div>
+    
+    <div class="input-group" id="watsonxCreds">
+      <label>IBM watsonx Credentials</label>
       <div class="optional-creds">
         <input type="password" id="apiKey" placeholder="IBM Cloud API Key"/>
         <input type="text" id="projectId" placeholder="watsonx Project ID"/>
       </div>
     </div>
     
+    <div class="input-group" id="openaiCreds" style="display: none;">
+      <label>OpenAI API Key</label>
+      <div class="input-wrapper">
+        <input type="password" id="openaiKey" placeholder="sk-..."/>
+      </div>
+    </div>
+    
+    <div class="input-group" id="anthropicCreds" style="display: none;">
+      <label>Anthropic API Key</label>
+      <div class="input-wrapper">
+        <input type="password" id="anthropicKey" placeholder="sk-ant-..."/>
+      </div>
+    </div>
+    
+    <div class="input-group" id="ollamaCreds" style="display: none;">
+      <label>Ollama Configuration</label>
+      <div class="optional-creds">
+        <input type="text" id="ollamaModel" placeholder="Model (llama3)" value="llama3"/>
+        <input type="text" id="ollamaEndpoint" placeholder="Endpoint" value="http://localhost:11434"/>
+      </div>
+      <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">
+        💡 Requires Ollama running locally. <a href="https://ollama.ai" target="_blank" style="color: var(--primary);">Install Ollama</a>
+      </div>
+    </div>
+    
     <div id="setup-error" style="color: var(--red); font-size: 13px; margin-bottom: 16px; display: none; text-align: center;"></div>
     
     <button class="btn-primary" id="analyzeBtn" onclick="analyze()">
-      Generate Infrastructure
+      Analyze DevOps Readiness
     </button>
     
     <div class="loading-overlay" id="loading">
@@ -264,27 +377,38 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 <div id="dashboard-view">
   <aside class="sidebar">
     <div class="sidebar-header">
-      <div class="sidebar-logo">🚀 Ship<span>Sage</span></div>
+      <div class="sidebar-logo"> Ship<span>Sage</span></div>
     </div>
     
     <div class="nav-menu">
       <div class="nav-section">Dashboard</div>
-      <a class="nav-item active" onclick="switchView('overview', this)"><i>📊</i> Overview</a>
-      <a class="nav-item" onclick="switchView('summary', this)"><i>📝</i> AI Analysis</a>
+      <a class="nav-item active" onclick="switchView('overview', this)"><i></i> Overview</a>
+      <a class="nav-item" onclick="switchView('summary', this)"><i></i> AI Analysis</a>
+      <a class="nav-item" onclick="switchView('cost', this)"><i>💰</i> Cost Estimate</a>
       
       <div class="nav-section" style="margin-top: 24px;">Generated Configs</div>
-      <a class="nav-item" onclick="switchView('dockerfile', this)"><i>🐳</i> Dockerfile</a>
-      <a class="nav-item" onclick="switchView('compose', this)"><i>🐙</i> Docker Compose</a>
-      <a class="nav-item" onclick="switchView('kubernetes', this)"><i>☸️</i> Kubernetes</a>
-      <a class="nav-item" onclick="switchView('cicd', this)"><i>⚡</i> CI/CD Pipeline</a>
-      <a class="nav-item" onclick="switchView('aws_terraform', this)"><i>☁️</i> AWS Terraform</a>
-      <a class="nav-item" onclick="switchView('monitoring', this)"><i>📈</i> ELK Stack</a>
-      <a class="nav-item" onclick="switchView('env_config', this)"><i>🔐</i> Env & Nginx</a>
+      <a class="nav-item" onclick="switchView('dockerfile', this)"><i></i> Dockerfile</a>
+      <a class="nav-item" onclick="switchView('compose', this)"><i></i> Docker Compose</a>
+      <a class="nav-item" onclick="switchView('kubernetes', this)"><i></i> Kubernetes</a>
+      <a class="nav-item" onclick="switchView('cicd', this)"><i></i> CI/CD Pipeline</a>
+      <a class="nav-item" onclick="switchView('aws_terraform', this)"><i></i> AWS Terraform</a>
+      <a class="nav-item" onclick="switchView('monitoring', this)"><i></i> ELK Stack</a>
+      <a class="nav-item" onclick="switchView('env_config', this)"><i></i> Env & Nginx</a>
+    </div>
+    
+    <div class="project-history">
+      <div class="project-history-header">
+        <div class="project-history-title">📂 Project History</div>
+        <div class="project-history-clear" onclick="clearProjectHistory()">Clear All</div>
+      </div>
+      <div id="project-history-list">
+        <div class="project-history-empty">No projects yet. Analyze a repository to get started!</div>
+      </div>
     </div>
     
     <div class="sidebar-footer">
       <div class="user-profile">
-        <div class="avatar">👨‍💻</div>
+        <div class="avatar"></div>
         <div class="user-info">
           <div>Dev Team</div>
           <div>Free Tier</div>
@@ -297,15 +421,15 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
     <header class="topbar">
       <div class="repo-info">
         <div class="repo-name">
-          📦 <a id="topbar-repo" href="#" target="_blank">owner/repo</a>
+           <a id="topbar-repo" href="#" target="_blank">owner/repo</a>
         </div>
         <span class="badge" id="topbar-branch">main</span>
         <span class="badge" id="topbar-stack">Python</span>
-        <span class="badge watsonx" id="topbar-ai">🤖 IBM watsonx Active</span>
+        <span class="badge watsonx" id="topbar-ai"> IBM watsonx Active</span>
       </div>
       <div class="topbar-actions">
-        <button class="btn-outline" onclick="toggleTheme()" id="dash-theme-btn">☀️ Light Mode</button>
-        <button class="btn-outline" onclick="downloadAllFiles()" style="background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.3);color:#10b981;">📦 Download All</button>
+        <button class="btn-outline" onclick="toggleTheme()" id="dash-theme-btn"> Light Mode</button>
+        <button class="btn-outline" onclick="downloadAllFiles()" style="background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.3);color:#10b981;"> Download All</button>
         <button class="btn-outline" onclick="location.reload()">+ New Project</button>
       </div>
     </header>
@@ -326,44 +450,50 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
           </div>
           <div class="metric-card">
             <div class="metric-title">Est. Time Saved</div>
-            <div class="metric-value">14h</div>
+            <div class="metric-value" id="metric-time-saved">14h</div>
             <div class="metric-sub">Manual setup equivalent</div>
           </div>
           <div class="metric-card">
-            <div class="metric-title">Cloud Readiness</div>
-            <div class="metric-value">98%</div>
-            <div class="metric-sub">Containerized & Orchestrated</div>
+            <div class="metric-title">Readiness Score</div>
+            <div class="metric-value" id="metric-readiness">0%</div>
+            <div class="metric-sub" id="metric-readiness-sub">Waiting for analysis</div>
           </div>
         </div>
         
+        
+        <div class="readiness-layout">
+          <div class="score-panel">
+            <div class="card-title">Production Readiness</div>
+            <div class="score-ring" id="score-ring" style="--score:0"><strong id="score-number">0</strong></div>
+            <div class="score-status" id="score-status">Analyze a repo</div>
+            <div class="score-copy" id="score-summary">ShipSage checks the repo for the basics a team needs before trusting generated deployment code.</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Trust Checks</div>
+            <div class="check-grid" id="trust-checks"></div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr;">
+          <div class="card">
+            <div class="card-title">Deployment Blockers</div>
+            <div class="action-list" id="blocker-list"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">What To Do Next</div>
+            <div class="action-list" id="next-actions"></div>
+          </div>
+        </div>
         <div class="dashboard-grid">
           <div class="card">
-            <div class="card-title"><i>🔄</i> Deployment Pipeline Architecture</div>
-            <div class="pipeline-flow">
-              <div class="pipe-node">
-                <div class="pipe-icon active">📦</div>
-                <div class="pipe-label">GitHub Code</div>
-              </div>
-              <div class="pipe-line"></div>
-              <div class="pipe-node">
-                <div class="pipe-icon active">⚡</div>
-                <div class="pipe-label">GitHub Actions</div>
-              </div>
-              <div class="pipe-line"></div>
-              <div class="pipe-node">
-                <div class="pipe-icon active">🐳</div>
-                <div class="pipe-label">Docker Build</div>
-              </div>
-              <div class="pipe-line"></div>
-              <div class="pipe-node">
-                <div class="pipe-icon active">☸️</div>
-                <div class="pipe-label">AWS EKS</div>
-              </div>
+            <div class="card-title"><i></i> Deployment Pipeline Architecture</div>
+            <div class="pipeline-flow" id="pipeline-flow">
+              <!-- Pipeline stages will be dynamically rendered here -->
             </div>
           </div>
           
           <div class="card">
-            <div class="card-title"><i>🛠️</i> Detected Stack</div>
+            <div class="card-title"><i></i> Detected Stack</div>
             <div style="display: flex; flex-wrap: wrap; gap: 8px;" id="stack-tags">
               <!-- Stack tags inserted here -->
             </div>
@@ -375,13 +505,13 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 
         <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr;">
           <div class="card">
-            <div class="card-title"><i>⏱️</i> Time Saved by DevOps Stage</div>
+            <div class="card-title"><i></i> Time Saved by DevOps Stage</div>
             <div class="chart-container">
               <canvas id="timeSavedChart"></canvas>
             </div>
           </div>
           <div class="card">
-            <div class="card-title"><i>📈</i> Infrastructure Complexity Score</div>
+            <div class="card-title"><i></i> Infrastructure Complexity Score</div>
             <div class="chart-container">
               <canvas id="complexityChart"></canvas>
             </div>
@@ -389,14 +519,117 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
         </div>
 
         <div class="card" style="margin-top: 24px;">
-          <div class="card-title"><i>🤖</i> AI DevOps Recommendations</div>
+          <div class="card-title"><i></i> AI DevOps Recommendations</div>
           <div class="recs-grid" id="ai-recs">
-            <div class="rec-item"><div class="rec-icon">🔒</div><div class="rec-title">Add Secrets Manager</div><div class="rec-desc">Use AWS Secrets Manager or HashiCorp Vault instead of .env files in production for better security.</div></div>
-            <div class="rec-item"><div class="rec-icon">📊</div><div class="rec-title">Enable APM</div><div class="rec-desc">Add Application Performance Monitoring (Datadog, New Relic) to track latency and error rates in real-time.</div></div>
-            <div class="rec-item"><div class="rec-icon">🔄</div><div class="rec-title">Blue-Green Deploys</div><div class="rec-desc">Configure blue-green or canary deployments in your K8s setup for zero-downtime releases.</div></div>
-            <div class="rec-item"><div class="rec-icon">🛡️</div><div class="rec-title">Container Scanning</div><div class="rec-desc">Add Trivy or Snyk to your CI/CD pipeline to scan Docker images for vulnerabilities before deploy.</div></div>
-            <div class="rec-item"><div class="rec-icon">💾</div><div class="rec-title">Backup Strategy</div><div class="rec-desc">Set up automated database backups with point-in-time recovery using AWS RDS snapshots.</div></div>
-            <div class="rec-item"><div class="rec-icon">⚡</div><div class="rec-title">CDN & Caching</div><div class="rec-desc">Add CloudFront CDN and Redis caching layer to reduce latency by 60% for static assets.</div></div>
+            <div class="rec-item"><div class="rec-icon"></div><div class="rec-title">Add Secrets Manager</div><div class="rec-desc">Use AWS Secrets Manager or HashiCorp Vault instead of .env files in production for better security.</div></div>
+            <div class="rec-item"><div class="rec-icon"></div><div class="rec-title">Enable APM</div><div class="rec-desc">Add Application Performance Monitoring (Datadog, New Relic) to track latency and error rates in real-time.</div></div>
+            <div class="rec-item"><div class="rec-icon"></div><div class="rec-title">Blue-Green Deploys</div><div class="rec-desc">Configure blue-green or canary deployments in your K8s setup for zero-downtime releases.</div></div>
+            <div class="rec-item"><div class="rec-icon"></div><div class="rec-title">Container Scanning</div><div class="rec-desc">Add Trivy or Snyk to your CI/CD pipeline to scan Docker images for vulnerabilities before deploy.</div></div>
+            <div class="rec-item"><div class="rec-icon"></div><div class="rec-title">Backup Strategy</div><div class="rec-desc">Set up automated database backups with point-in-time recovery using AWS RDS snapshots.</div></div>
+            <div class="rec-item"><div class="rec-icon"></div><div class="rec-title">CDN & Caching</div><div class="rec-desc">Add CloudFront CDN and Redis caching layer to reduce latency by 60% for static assets.</div></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Executive Summary View -->
+      <div id="view-executive" class="view-panel">
+        <div class="editor-header">
+          <div class="editor-title">👔 Executive Summary Dashboard</div>
+        </div>
+        
+        <!-- Executive Overview Cards -->
+        <div class="dashboard-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 24px;">
+          <div class="card" style="text-align: center;">
+            <div style="font-size: 14px; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">Deployment Timeline</div>
+            <div style="font-size: 42px; font-weight: 800; color: var(--primary); margin-bottom: 8px;" id="exec-timeline-days">0</div>
+            <div style="font-size: 13px; color: var(--text-muted);" id="exec-timeline-date">Target Date</div>
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Confidence Level</div>
+              <div style="font-size: 16px; font-weight: 700;" id="exec-confidence">Medium</div>
+            </div>
+          </div>
+          
+          <div class="card" style="text-align: center;">
+            <div style="font-size: 14px; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">Annual ROI</div>
+            <div style="font-size: 42px; font-weight: 800; color: var(--success); margin-bottom: 8px;" id="exec-roi-annual">$0</div>
+            <div style="font-size: 13px; color: var(--text-muted);">12-Month Projection</div>
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Monthly Savings</div>
+              <div style="font-size: 16px; font-weight: 700; color: var(--success);" id="exec-roi-monthly">$0</div>
+            </div>
+          </div>
+          
+          <div class="card" style="text-align: center;">
+            <div style="font-size: 14px; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">Team Resources</div>
+            <div style="font-size: 42px; font-weight: 800; color: var(--accent); margin-bottom: 8px;" id="exec-team-size">0</div>
+            <div style="font-size: 13px; color: var(--text-muted);">Engineers Required</div>
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Duration</div>
+              <div style="font-size: 16px; font-weight: 700;" id="exec-duration">0 weeks</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Deployment Timeline Phases -->
+        <div class="card" style="margin-bottom: 24px;">
+          <div class="card-title">📅 Deployment Roadmap</div>
+          <div id="exec-timeline-phases" style="display: grid; gap: 16px;"></div>
+        </div>
+        
+        <!-- Strengths and Gaps -->
+        <div class="dashboard-grid" style="margin-bottom: 24px;">
+          <div class="card">
+            <div class="card-title" style="color: var(--success);">✅ Strengths</div>
+            <div id="exec-strengths" style="display: grid; gap: 10px;"></div>
+          </div>
+          
+          <div class="card">
+            <div class="card-title" style="color: var(--warning);">⚠️ Gaps to Address</div>
+            <div id="exec-gaps" style="display: grid; gap: 10px;"></div>
+          </div>
+        </div>
+        
+        <!-- Executive Recommendations -->
+        <div class="card" style="margin-bottom: 24px;">
+          <div class="card-title">🎯 Executive Recommendations</div>
+          <div id="exec-recommendations" style="display: grid; gap: 12px;"></div>
+        </div>
+        
+        <!-- Risk Assessment -->
+        <div class="card" style="margin-bottom: 24px;">
+          <div class="card-title">🛡️ Risk Assessment</div>
+          <div id="exec-risks" style="display: grid; gap: 12px;"></div>
+        </div>
+        
+        <!-- Quick Wins -->
+        <div class="card" style="margin-bottom: 24px;">
+          <div class="card-title">⚡ Quick Wins (High Impact, Low Effort)</div>
+          <div id="exec-quick-wins" style="display: grid; gap: 12px;"></div>
+        </div>
+        
+        <!-- ROI Details -->
+        <div class="dashboard-grid">
+          <div class="card">
+            <div class="card-title">💰 Financial Impact</div>
+            <div style="display: grid; gap: 16px;">
+              <div>
+                <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">Setup Cost Savings</div>
+                <div style="font-size: 28px; font-weight: 700; color: var(--primary);" id="exec-roi-setup">$0</div>
+              </div>
+              <div style="padding-top: 16px; border-top: 1px solid var(--border);">
+                <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">Break-Even Period</div>
+                <div style="font-size: 20px; font-weight: 700;" id="exec-roi-breakeven">Immediate</div>
+              </div>
+              <div style="padding-top: 16px; border-top: 1px solid var(--border);">
+                <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">ROI Percentage</div>
+                <div style="font-size: 20px; font-weight: 700; color: var(--success);" id="exec-roi-percentage">∞</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="card-title">🎁 Intangible Benefits</div>
+            <div id="exec-intangible-benefits" style="display: grid; gap: 8px;"></div>
           </div>
         </div>
       </div>
@@ -404,19 +637,52 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
       <!-- Summary View -->
       <div id="view-summary" class="view-panel">
         <div class="editor-header">
-          <div class="editor-title"><i>📝</i> AI Codebase Analysis</div>
+          <div class="editor-title"><i></i> AI Codebase Analysis</div>
         </div>
         <div class="card md-prose" id="content-summary"></div>
+      </div>
+      
+      <!-- Cost Estimation View -->
+      <div id="view-cost" class="view-panel">
+        <div class="editor-header">
+          <div class="editor-title">💰 AWS Cost Estimation</div>
+        </div>
+        
+        <div class="dashboard-grid" style="grid-template-columns: 1fr 2fr; margin-bottom: 24px;">
+          <div class="card" style="text-align: center;">
+            <div style="font-size: 14px; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">Estimated Monthly Cost</div>
+            <div style="font-size: 48px; font-weight: 800; color: var(--primary); margin-bottom: 8px;" id="cost-total">$0.00</div>
+            <div style="font-size: 13px; color: var(--text-muted);" id="cost-region">US East 1</div>
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); line-height: 1.6;" id="cost-disclaimer"></div>
+          </div>
+          
+          <div class="card">
+            <div class="card-title">💳 Cost Breakdown by Service</div>
+            <div id="cost-breakdown" style="display: grid; gap: 8px;"></div>
+          </div>
+        </div>
+        
+        <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr;">
+          <div class="card">
+            <div class="card-title">⚠️ Warnings</div>
+            <div id="cost-warnings" style="display: grid; gap: 8px;"></div>
+          </div>
+          
+          <div class="card">
+            <div class="card-title">💡 Cost Optimization Tips</div>
+            <div id="cost-optimizations" style="display: grid; gap: 8px;"></div>
+          </div>
+        </div>
       </div>
       
       <!-- Generated Config Views -->
       <!-- Docker -->
       <div id="view-dockerfile" class="view-panel">
         <div class="editor-header">
-          <div class="editor-title"><i>🐳</i> Dockerfile</div>
+          <div class="editor-title"><i></i> Dockerfile</div>
           <div class="editor-actions">
-            <button class="btn-action" onclick="downloadFile('dockerfile', 'Dockerfile')">⬇️ Download</button>
-            <button class="btn-action" onclick="copyCode('dockerfile', this)">📋 Copy</button>
+            <button class="btn-action" onclick="downloadFile('dockerfile', 'Dockerfile')"> Download</button>
+            <button class="btn-action" onclick="copyCode('dockerfile', this)"> Copy</button>
           </div>
         </div>
         <div class="code-container">
@@ -431,10 +697,10 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
       <!-- Compose -->
       <div id="view-compose" class="view-panel">
         <div class="editor-header">
-          <div class="editor-title"><i>🐙</i> Docker Compose</div>
+          <div class="editor-title"><i></i> Docker Compose</div>
           <div class="editor-actions">
-            <button class="btn-action" onclick="downloadFile('compose', 'docker-compose.yml')">⬇️ Download</button>
-            <button class="btn-action" onclick="copyCode('compose', this)">📋 Copy</button>
+            <button class="btn-action" onclick="downloadFile('compose', 'docker-compose.yml')"> Download</button>
+            <button class="btn-action" onclick="copyCode('compose', this)"> Copy</button>
           </div>
         </div>
         <div class="code-container">
@@ -449,10 +715,10 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
       <!-- Kubernetes -->
       <div id="view-kubernetes" class="view-panel">
         <div class="editor-header">
-          <div class="editor-title"><i>☸️</i> Kubernetes Manifests</div>
+          <div class="editor-title"><i></i> Kubernetes Manifests</div>
           <div class="editor-actions">
-            <button class="btn-action" onclick="downloadFile('kubernetes', 'k8s-manifests.yaml')">⬇️ Download</button>
-            <button class="btn-action" onclick="copyCode('kubernetes', this)">📋 Copy</button>
+            <button class="btn-action" onclick="downloadFile('kubernetes', 'k8s-manifests.yaml')"> Download</button>
+            <button class="btn-action" onclick="copyCode('kubernetes', this)"> Copy</button>
           </div>
         </div>
         <div class="code-container">
@@ -467,10 +733,10 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
       <!-- CI/CD -->
       <div id="view-cicd" class="view-panel">
         <div class="editor-header">
-          <div class="editor-title"><i>⚡</i> GitHub Actions CI/CD</div>
+          <div class="editor-title"><i></i> GitHub Actions CI/CD</div>
           <div class="editor-actions">
-            <button class="btn-action" onclick="downloadFile('cicd', 'main.yml')">⬇️ Download</button>
-            <button class="btn-action" onclick="copyCode('cicd', this)">📋 Copy</button>
+            <button class="btn-action" onclick="downloadFile('cicd', 'main.yml')"> Download</button>
+            <button class="btn-action" onclick="copyCode('cicd', this)"> Copy</button>
           </div>
         </div>
         <div class="code-container">
@@ -485,10 +751,10 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
       <!-- AWS Terraform -->
       <div id="view-aws_terraform" class="view-panel">
         <div class="editor-header">
-          <div class="editor-title"><i>☁️</i> AWS Terraform</div>
+          <div class="editor-title"><i></i> AWS Terraform</div>
           <div class="editor-actions">
-            <button class="btn-action" onclick="downloadFile('aws_terraform', 'main.tf')">⬇️ Download</button>
-            <button class="btn-action" onclick="copyCode('aws_terraform', this)">📋 Copy</button>
+            <button class="btn-action" onclick="downloadFile('aws_terraform', 'main.tf')"> Download</button>
+            <button class="btn-action" onclick="copyCode('aws_terraform', this)"> Copy</button>
           </div>
         </div>
         <div class="code-container">
@@ -503,10 +769,10 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
       <!-- ELK Monitoring -->
       <div id="view-monitoring" class="view-panel">
         <div class="editor-header">
-          <div class="editor-title"><i>📈</i> ELK Stack & Prometheus</div>
+          <div class="editor-title"><i></i> ELK Stack & Prometheus</div>
           <div class="editor-actions">
-            <button class="btn-action" onclick="downloadFile('monitoring', 'monitoring.yml')">⬇️ Download</button>
-            <button class="btn-action" onclick="copyCode('monitoring', this)">📋 Copy</button>
+            <button class="btn-action" onclick="downloadFile('monitoring', 'monitoring.yml')"> Download</button>
+            <button class="btn-action" onclick="copyCode('monitoring', this)"> Copy</button>
           </div>
         </div>
         <div class="code-container">
@@ -521,10 +787,10 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
       <!-- Env & Nginx -->
       <div id="view-env_config" class="view-panel">
         <div class="editor-header">
-          <div class="editor-title"><i>🔐</i> Env Template & Nginx Proxy</div>
+          <div class="editor-title"><i></i> Env Template & Nginx Proxy</div>
           <div class="editor-actions">
-            <button class="btn-action" onclick="downloadFile('env_config', '.env.template')">⬇️ Download</button>
-            <button class="btn-action" onclick="copyCode('env_config', this)">📋 Copy</button>
+            <button class="btn-action" onclick="downloadFile('env_config', '.env.template')"> Download</button>
+            <button class="btn-action" onclick="copyCode('env_config', this)"> Copy</button>
           </div>
         </div>
         <div class="code-container">
@@ -546,17 +812,26 @@ let isLightMode = false;
 let timeChartInst = null;
 let complexityChartInst = null;
 
+// Toggle AI Provider Credentials
+function toggleAICredentials() {
+  const provider = document.getElementById('aiProvider').value;
+  document.getElementById('watsonxCreds').style.display = provider === 'watsonx' ? 'block' : 'none';
+  document.getElementById('openaiCreds').style.display = provider === 'openai' ? 'block' : 'none';
+  document.getElementById('anthropicCreds').style.display = provider === 'anthropic' ? 'block' : 'none';
+  document.getElementById('ollamaCreds').style.display = provider === 'ollama' ? 'block' : 'none';
+}
+
 // Theme Toggle
 function toggleTheme() {
   isLightMode = !isLightMode;
   if (isLightMode) {
     document.documentElement.setAttribute('data-theme', 'light');
-    document.getElementById('setup-theme-btn').innerHTML = '🌙 Dark Mode';
-    document.getElementById('dash-theme-btn').innerHTML = '🌙 Dark Mode';
+    document.getElementById('setup-theme-btn').innerHTML = ' Dark Mode';
+    document.getElementById('dash-theme-btn').innerHTML = ' Dark Mode';
   } else {
     document.documentElement.removeAttribute('data-theme');
-    document.getElementById('setup-theme-btn').innerHTML = '☀️ Light Mode';
-    document.getElementById('dash-theme-btn').innerHTML = '☀️ Light Mode';
+    document.getElementById('setup-theme-btn').innerHTML = ' Light Mode';
+    document.getElementById('dash-theme-btn').innerHTML = ' Light Mode';
   }
   // Re-render charts to update grid lines colors
   if(timeChartInst) timeChartInst.update();
@@ -582,14 +857,34 @@ function stopLoading() {
 
 async function analyze() {
   const url = document.getElementById('repoUrl').value.trim();
-  const apiKey = document.getElementById('apiKey').value.trim();
-  const projectId = document.getElementById('projectId').value.trim();
+  const githubToken = document.getElementById('githubToken').value.trim();
+  const aiProvider = document.getElementById('aiProvider').value;
   const errorEl = document.getElementById('setup-error');
   
   if (!url) {
     errorEl.textContent = "Please enter a valid GitHub repository URL.";
     errorEl.style.display = 'block';
     return;
+  }
+  
+  // Build request payload
+  const payload = {
+    repo_url: url,
+    github_token: githubToken,
+    ai_provider: aiProvider
+  };
+  
+  // Add provider-specific credentials
+  if (aiProvider === 'watsonx') {
+    payload.watsonx_api_key = document.getElementById('apiKey').value.trim();
+    payload.watsonx_project_id = document.getElementById('projectId').value.trim();
+  } else if (aiProvider === 'openai') {
+    payload.openai_api_key = document.getElementById('openaiKey').value.trim();
+  } else if (aiProvider === 'anthropic') {
+    payload.anthropic_api_key = document.getElementById('anthropicKey').value.trim();
+  } else if (aiProvider === 'ollama') {
+    payload.ollama_model = document.getElementById('ollamaModel').value.trim() || 'llama3';
+    payload.ollama_endpoint = document.getElementById('ollamaEndpoint').value.trim() || 'http://localhost:11434';
   }
   
   errorEl.style.display = 'none';
@@ -600,7 +895,7 @@ async function analyze() {
     const r = await fetch('/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repo_url: url, watsonx_api_key: apiKey, watsonx_project_id: projectId })
+      body: JSON.stringify(payload)
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || 'Analysis failed');
@@ -615,6 +910,27 @@ async function analyze() {
     // Init charts
     initCharts();
     
+    // Initialize collaboration if session_id is available
+    if (d.session_id) {
+      currentSessionId = d.session_id;
+      currentOwnerId = d.owner_id || localStorage.getItem('shipsage_owner_id');
+      
+      // Store owner ID for future sessions
+      if (!localStorage.getItem('shipsage_owner_id')) {
+        const ownerId = 'user_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('shipsage_owner_id', ownerId);
+        currentOwnerId = ownerId;
+      }
+      
+      // Store current session
+      localStorage.setItem('shipsage_current_session', d.session_id);
+      
+      initCollaboration(d.session_id);
+      
+      // Load project history
+      loadProjectHistory();
+    }
+    
   } catch(e) {
     errorEl.textContent = e.message || 'Something went wrong connecting to the server.';
     errorEl.style.display = 'block';
@@ -623,6 +939,159 @@ async function analyze() {
     document.getElementById('analyzeBtn').disabled = false;
   }
 }
+
+// Project History Management
+let currentSessionId = null;
+let currentOwnerId = null;
+
+async function loadProjectHistory() {
+  try {
+    const ownerId = localStorage.getItem('shipsage_owner_id');
+    if (!ownerId) return;
+    
+    const response = await fetch(`/api/sessions?owner_id=${ownerId}&limit=20`);
+    if (!response.ok) return;
+    
+    const data = await response.json();
+    const sessions = data.sessions || [];
+    
+    const listEl = document.getElementById('project-history-list');
+    
+    if (sessions.length === 0) {
+      listEl.innerHTML = '<div class="project-history-empty">No projects yet. Analyze a repository to get started!</div>';
+      return;
+    }
+    
+    listEl.innerHTML = sessions.map(session => {
+      const summary = session.summary || {};
+      const isActive = session.id === currentSessionId;
+      
+      return `
+        <div class="project-item ${isActive ? 'active' : ''}" onclick="loadProject('${session.id}')">
+          <div class="project-item-name">
+            📦 ${summary.repo_name || 'Unknown'}
+            <span class="project-item-delete" onclick="event.stopPropagation(); deleteProject('${session.id}')">×</span>
+          </div>
+          <div class="project-item-meta">
+            <span class="project-item-tag">${summary.project_type || 'Unknown'}</span>
+            ${(summary.stack || []).map(tech => `<span class="project-item-tag">${tech}</span>`).join('')}
+            <span style="margin-left: auto; font-size: 10px;">${summary.created_ago || ''}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (error) {
+    console.error('Failed to load project history:', error);
+  }
+}
+
+async function loadProject(sessionId) {
+  try {
+    const response = await fetch(`/api/sessions/${sessionId}`);
+    if (!response.ok) {
+      alert('Failed to load project. It may have expired.');
+      await loadProjectHistory();
+      return;
+    }
+    
+    const data = await response.json();
+    currentSessionId = sessionId;
+    
+    // Store in localStorage
+    localStorage.setItem('shipsage_current_session', sessionId);
+    
+    // Render the dashboard with loaded data
+    globalData = data;
+    renderDashboard(data);
+    
+    // Update project history UI
+    await loadProjectHistory();
+    
+    // Reinit charts
+    initCharts();
+    
+    // Show dashboard if not already visible
+    document.getElementById('setup-view').style.display = 'none';
+    document.getElementById('dashboard-view').style.display = 'flex';
+    
+    // Initialize collaboration if session_id is available
+    if (data.session && data.session.id) {
+      initCollaboration(data.session.id);
+    }
+  } catch (error) {
+    console.error('Failed to load project:', error);
+    alert('Failed to load project: ' + error.message);
+  }
+}
+
+async function deleteProject(sessionId) {
+  if (!confirm('Are you sure you want to delete this project from history?')) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/api/sessions/${sessionId}`, {
+      method: 'DELETE'
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to delete project');
+    }
+    
+    // If we deleted the current project, reload the page
+    if (sessionId === currentSessionId) {
+      location.reload();
+    } else {
+      // Just refresh the history list
+      await loadProjectHistory();
+    }
+  } catch (error) {
+    console.error('Failed to delete project:', error);
+    alert('Failed to delete project: ' + error.message);
+  }
+}
+
+async function clearProjectHistory() {
+  if (!confirm('Are you sure you want to clear all project history? This cannot be undone.')) {
+    return;
+  }
+  
+  try {
+    const ownerId = localStorage.getItem('shipsage_owner_id');
+    if (!ownerId) return;
+    
+    const response = await fetch(`/api/sessions?owner_id=${ownerId}&limit=100`);
+    if (!response.ok) return;
+    
+    const data = await response.json();
+    const sessions = data.sessions || [];
+    
+    // Delete all sessions
+    for (const session of sessions) {
+      await fetch(`/api/sessions/${session.id}`, { method: 'DELETE' });
+    }
+    
+    // Reload the page
+    location.reload();
+  } catch (error) {
+    console.error('Failed to clear history:', error);
+    alert('Failed to clear history: ' + error.message);
+  }
+}
+
+// Load project history when dashboard is shown
+window.addEventListener('load', () => {
+  // Check if we have a stored session to restore
+  const storedSession = localStorage.getItem('shipsage_current_session');
+  if (storedSession && document.getElementById('dashboard-view').style.display === 'flex') {
+    loadProject(storedSession);
+  }
+  
+  // Load project history if dashboard is visible
+  if (document.getElementById('dashboard-view').style.display === 'flex') {
+    loadProjectHistory();
+  }
+});
 
 function renderDashboard(d) {
   // Topbar
@@ -634,18 +1103,24 @@ function renderDashboard(d) {
   const aiBadge = document.getElementById('topbar-ai');
   if (d.ai_powered) {
     aiBadge.className = 'badge watsonx';
-    aiBadge.textContent = '🤖 IBM watsonx Active';
+    aiBadge.textContent = ' IBM watsonx Active';
   } else {
     aiBadge.className = 'badge';
     aiBadge.style.background = 'rgba(245,158,11,0.1)';
     aiBadge.style.borderColor = 'rgba(245,158,11,0.3)';
     aiBadge.style.color = '#fbbf24';
-    aiBadge.textContent = '⚡ Smart Rule Generation';
+    aiBadge.textContent = ' Smart Rule Generation';
   }
   
   // Overview metrics
   document.getElementById('metric-files').textContent = d.analyzed_files;
   document.getElementById('metric-time').textContent = `Analyzed in ${d.analysis_time}s`;
+  
+  // Time saved metric
+  const timeSaved = d.readiness?.time_saved_hours || 14;
+  document.getElementById('metric-time-saved').textContent = `${timeSaved}h`;
+  
+  renderReadiness(d.readiness);
   
   // Stack tags
   const stackTags = document.getElementById('stack-tags');
@@ -663,8 +1138,136 @@ function renderDashboard(d) {
       hljs.highlightElement(el);
     }
   });
+  
+  // Render cost estimation
+  if (d.cost_estimate) {
+    renderCostEstimate(d.cost_estimate);
+  }
+  
+  // Render executive summary
+  if (d.executive_summary) {
+    renderExecutiveSummary(d.executive_summary);
+  }
+  
+  // Render pipeline stages
+  if (d.pipeline_stages) {
+    renderPipeline(d.pipeline_stages);
+  }
 }
 
+function renderPipeline(stages) {
+  const pipelineFlow = document.getElementById('pipeline-flow');
+  if (!pipelineFlow || !stages || stages.length === 0) return;
+  
+  let html = '';
+  stages.forEach((stage, index) => {
+    // Status class for styling
+    const statusClass = stage.status === 'configured' ? 'active' :
+                       stage.status === 'missing' ? 'missing' : 'recommended';
+    
+    // Status icon
+    const statusIcon = stage.status === 'configured' ? '✓' :
+                      stage.status === 'missing' ? '✗' : '!';
+    
+    // Stage node
+    html += `
+      <div class="pipe-node ${statusClass}" title="${stage.description}">
+        <div class="pipe-icon-wrapper">
+          <div class="pipe-icon-emoji">${stage.icon}</div>
+          <div class="pipe-status-badge">${statusIcon}</div>
+        </div>
+        <div class="pipe-label">${stage.name}</div>
+        <div class="pipe-tools">${stage.tools.join(', ')}</div>
+        <div class="pipe-time">${stage.time}</div>
+      </div>
+    `;
+    
+    // Add connector line between stages (except after last stage)
+    if (index < stages.length - 1) {
+      html += '<div class="pipe-line"></div>';
+    }
+  });
+  
+  pipelineFlow.innerHTML = html;
+}
+
+function renderCostEstimate(cost) {
+  // Total cost
+  document.getElementById('cost-total').textContent = `$${cost.monthly_total.toFixed(2)}`;
+  document.getElementById('cost-region').textContent = cost.region || 'US East 1';
+  document.getElementById('cost-disclaimer').textContent = cost.disclaimer || '';
+  
+  // Breakdown
+  const breakdown = document.getElementById('cost-breakdown');
+  breakdown.innerHTML = Object.entries(cost.breakdown || {}).map(([service, amount]) => {
+    const percentage = ((amount / cost.monthly_total) * 100).toFixed(1);
+    return `
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg); border-radius: 8px;">
+        <div style="flex: 1;">
+          <div style="font-size: 13px; font-weight: 600;">${service}</div>
+          <div style="width: 100%; height: 4px; background: var(--border); border-radius: 2px; margin-top: 4px; overflow: hidden;">
+            <div style="width: ${percentage}%; height: 100%; background: var(--primary);"></div>
+          </div>
+        </div>
+        <div style="font-size: 14px; font-weight: 700; margin-left: 16px; color: var(--primary);">$${amount.toFixed(2)}</div>
+      </div>
+    `;
+  }).join('');
+  
+  // Warnings
+  const warnings = document.getElementById('cost-warnings');
+  if (cost.warnings && cost.warnings.length > 0) {
+    warnings.innerHTML = cost.warnings.map(w => `
+      <div style="padding: 10px 12px; background: rgba(245,158,11,0.1); border-left: 3px solid var(--warning); border-radius: 6px; font-size: 13px; line-height: 1.5;">
+        ⚠️ ${w}
+      </div>
+    `).join('');
+  } else {
+    warnings.innerHTML = '<div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 13px;">No warnings</div>';
+  }
+  
+  // Optimizations
+  const optimizations = document.getElementById('cost-optimizations');
+  if (cost.optimizations && cost.optimizations.length > 0) {
+    optimizations.innerHTML = cost.optimizations.map(o => `
+      <div style="padding: 10px 12px; background: var(--bg); border-left: 3px solid var(--success); border-radius: 6px; font-size: 13px; line-height: 1.5;">
+        💡 ${o}
+      </div>
+    `).join('');
+  } else {
+    optimizations.innerHTML = '<div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 13px;">No recommendations</div>';
+  }
+}
+
+
+function renderReadiness(readiness) {
+  const r = readiness || { score: 0, status: 'Unknown', summary: 'No readiness data available.', signals: {}, blockers: [], next_actions: [] };
+  const score = Math.max(0, Math.min(100, r.score || 0));
+  document.getElementById('metric-readiness').textContent = `${score}%`;
+  document.getElementById('metric-readiness-sub').textContent = r.status || 'Needs review';
+  document.getElementById('score-ring').style.setProperty('--score', score);
+  document.getElementById('score-number').textContent = score;
+  document.getElementById('score-status').textContent = r.status || 'Needs review';
+  document.getElementById('score-summary').textContent = r.summary || '';
+
+  const labels = {
+    tests: ['Tests', 'Automated checks before deployment'],
+    ci: ['CI/CD', 'A workflow runs build/test/deploy steps'],
+    docker: ['Container', 'Docker assets already exist or were generated'],
+    env_template: ['Env Template', 'Required configuration is documented'],
+    docs: ['Docs', 'README or docs are present'],
+    health: ['Health Check', 'App exposes or implies a health contract'],
+    infra: ['Infra Code', 'Terraform, Kubernetes, Helm, or similar assets found']
+  };
+  document.getElementById('trust-checks').innerHTML = Object.entries(labels).map(([key, value]) => {
+    const passed = !!r.signals?.[key];
+    return `<div class="check-item"><div class="check-mark ${passed ? 'pass' : 'fail'}">${passed ? 'OK' : '!'}</div><div><div class="check-title">${value[0]}</div><div class="check-desc">${value[1]}</div></div></div>`;
+  }).join('');
+
+  const blockers = (r.blockers && r.blockers.length) ? r.blockers : ['No major blockers detected. Still review generated files before production use.'];
+  document.getElementById('blocker-list').innerHTML = blockers.map(item => `<div class="action-item blocker-item">${item}</div>`).join('');
+  document.getElementById('next-actions').innerHTML = (r.next_actions || []).map(item => `<div class="action-item">${item}</div>`).join('');
+}
 function initCharts() {
   Chart.defaults.color = () => isLightMode ? '#6b7280' : '#9ca3af';
   Chart.defaults.font.family = 'Inter';
@@ -733,7 +1336,7 @@ function copyCode(id, btn) {
   if(content) {
     navigator.clipboard.writeText(content).then(() => {
       const originalText = btn.innerHTML;
-      btn.innerHTML = '✅ Copied!';
+      btn.innerHTML = ' Copied!';
       btn.classList.add('success');
       setTimeout(() => {
         btn.innerHTML = originalText;
@@ -758,19 +1361,28 @@ function downloadFile(id, filename) {
   }
 }
 
-function downloadAllFiles() {
-  const files = [
-    ['dockerfile', 'Dockerfile'],
-    ['compose', 'docker-compose.yml'],
-    ['kubernetes', 'k8s-manifests.yaml'],
-    ['cicd', 'main.yml'],
-    ['aws_terraform', 'main.tf'],
-    ['monitoring', 'monitoring.yml'],
-    ['env_config', '.env.template']
-  ];
-  files.forEach(([id, name], i) => {
-    setTimeout(() => downloadFile(id, name), i * 300);
-  });
+async function downloadAllFiles() {
+  try {
+    const response = await fetch('/export-zip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(globalData)
+    });
+    
+    if (!response.ok) throw new Error('Export failed');
+    
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `shipsage-${globalData.repo.replace('/', '-')}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    alert('Failed to export ZIP: ' + error.message);
+  }
 }
 
 function animateValue(el, end, suffix) {
@@ -787,9 +1399,148 @@ function animateValue(el, end, suffix) {
   requestAnimationFrame(update);
 }
 
+function renderExecutiveSummary(exec) {
+  if (!exec) return;
+  
+  // Overview metrics
+  const timeline = exec.timeline || {};
+  document.getElementById('exec-timeline-days').textContent = timeline.total_days || 0;
+  document.getElementById('exec-timeline-date').textContent = timeline.target_date || 'TBD';
+  document.getElementById('exec-confidence').textContent = timeline.confidence || 'Medium';
+  
+  const roi = exec.roi || {};
+  document.getElementById('exec-roi-annual').textContent = `$${(roi.annual_savings || 0).toLocaleString()}`;
+  document.getElementById('exec-roi-monthly').textContent = `$${(roi.monthly_savings || 0).toLocaleString()}`;
+  document.getElementById('exec-roi-setup').textContent = `$${(roi.setup_savings || 0).toLocaleString()}`;
+  document.getElementById('exec-roi-breakeven').textContent = roi.break_even_months === 0 ? 'Immediate' : `${roi.break_even_months} months`;
+  document.getElementById('exec-roi-percentage').textContent = roi.roi_percentage || '∞';
+  
+  const resources = exec.resource_requirements || {};
+  document.getElementById('exec-team-size').textContent = resources.team_size || 0;
+  document.getElementById('exec-duration').textContent = `${resources.duration_weeks || 0} weeks`;
+  
+  // Timeline phases
+  const phasesEl = document.getElementById('exec-timeline-phases');
+  if (timeline.phases && timeline.phases.length > 0) {
+    phasesEl.innerHTML = timeline.phases.map((phase, idx) => `
+      <div style="background: var(--bg); border-left: 4px solid ${idx === 0 ? 'var(--primary)' : idx === 1 ? 'var(--accent)' : 'var(--success)'}; border-radius: 8px; padding: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+          <div>
+            <div style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">${phase.name}</div>
+            <div style="font-size: 13px; color: var(--text-muted);">${phase.duration} days • ${phase.start_date} to ${phase.end_date}</div>
+          </div>
+          <div style="background: ${idx === 0 ? 'rgba(59,130,246,0.1)' : idx === 1 ? 'rgba(139,92,246,0.1)' : 'rgba(16,185,129,0.1)'}; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;">${Math.round((phase.duration / timeline.total_days) * 100)}%</div>
+        </div>
+        <div style="font-size: 13px; line-height: 1.6; color: var(--text-muted); margin-bottom: 12px;">${phase.description}</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+          ${phase.tasks.map(task => `<span style="background: var(--panel); padding: 4px 10px; border-radius: 6px; font-size: 12px; border: 1px solid var(--border);">${task}</span>`).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+  
+  // Strengths
+  const strengthsEl = document.getElementById('exec-strengths');
+  if (exec.strengths && exec.strengths.length > 0) {
+    strengthsEl.innerHTML = exec.strengths.map(s => `
+      <div style="padding: 12px; background: rgba(16,185,129,0.08); border-left: 3px solid var(--success); border-radius: 6px;">
+        <div style="font-size: 13px; font-weight: 700; margin-bottom: 4px;">${s.signal}</div>
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">${s.description}</div>
+      </div>
+    `).join('');
+  } else {
+    strengthsEl.innerHTML = '<div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 13px;">No strengths identified yet</div>';
+  }
+  
+  // Gaps
+  const gapsEl = document.getElementById('exec-gaps');
+  if (exec.gaps && exec.gaps.length > 0) {
+    gapsEl.innerHTML = exec.gaps.map(g => `
+      <div style="padding: 12px; background: rgba(245,158,11,0.08); border-left: 3px solid var(--warning); border-radius: 6px;">
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 4px;">
+          <div style="font-size: 13px; font-weight: 700;">${g.signal}</div>
+          <span style="background: ${g.priority === 'high' ? 'rgba(239,68,68,0.1)' : g.priority === 'medium' ? 'rgba(245,158,11,0.1)' : 'rgba(59,130,246,0.1)'}; color: ${g.priority === 'high' ? '#ef4444' : g.priority === 'medium' ? '#f59e0b' : '#3b82f6'}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase;">${g.priority}</span>
+        </div>
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">${g.description}</div>
+      </div>
+    `).join('');
+  } else {
+    gapsEl.innerHTML = '<div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 13px;">No gaps identified</div>';
+  }
+  
+  // Recommendations
+  const recsEl = document.getElementById('exec-recommendations');
+  if (exec.recommendations && exec.recommendations.length > 0) {
+    recsEl.innerHTML = exec.recommendations.map((rec, idx) => `
+      <div style="background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px;">
+        <div style="display: flex; gap: 12px; align-items: start;">
+          <div style="background: ${rec.priority === 'critical' ? 'rgba(239,68,68,0.1)' : rec.priority === 'high' ? 'rgba(245,158,11,0.1)' : 'rgba(59,130,246,0.1)'}; color: ${rec.priority === 'critical' ? '#ef4444' : rec.priority === 'high' ? '#f59e0b' : '#3b82f6'}; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0;">${idx + 1}</div>
+          <div style="flex: 1;">
+            <div style="font-size: 15px; font-weight: 700; margin-bottom: 6px;">${rec.title}</div>
+            <div style="font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 10px;">${rec.description}</div>
+            <div style="background: var(--panel); padding: 10px 12px; border-radius: 6px; border-left: 3px solid var(--primary); font-size: 13px; margin-bottom: 8px;">
+              <strong style="color: var(--primary);">Action:</strong> ${rec.action}
+            </div>
+            <div style="font-size: 12px; color: var(--success); font-weight: 600;">💡 Impact: ${rec.impact}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+  
+  // Risks
+  const risksEl = document.getElementById('exec-risks');
+  if (exec.risks && exec.risks.length > 0) {
+    risksEl.innerHTML = exec.risks.map(risk => `
+      <div style="background: var(--bg); border-left: 4px solid ${risk.level === 'critical' ? '#ef4444' : risk.level === 'high' ? '#f59e0b' : '#3b82f6'}; border-radius: 8px; padding: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+          <div style="font-size: 14px; font-weight: 700;">${risk.category}</div>
+          <span style="background: ${risk.level === 'critical' ? 'rgba(239,68,68,0.1)' : risk.level === 'high' ? 'rgba(245,158,11,0.1)' : 'rgba(59,130,246,0.1)'}; color: ${risk.level === 'critical' ? '#ef4444' : risk.level === 'high' ? '#f59e0b' : '#3b82f6'}; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">${risk.level}</span>
+        </div>
+        <div style="font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 10px;">${risk.description}</div>
+        <div style="background: var(--panel); padding: 10px 12px; border-radius: 6px; font-size: 12px; line-height: 1.5;">
+          <strong style="color: var(--primary);">Mitigation:</strong> ${risk.mitigation}
+        </div>
+      </div>
+    `).join('');
+  }
+  
+  // Quick Wins
+  const quickWinsEl = document.getElementById('exec-quick-wins');
+  if (exec.quick_wins && exec.quick_wins.length > 0) {
+    quickWinsEl.innerHTML = exec.quick_wins.map((win, idx) => `
+      <div style="background: linear-gradient(135deg, rgba(16,185,129,0.05) 0%, rgba(59,130,246,0.05) 100%); border: 1px solid var(--border); border-radius: 10px; padding: 16px;">
+        <div style="display: flex; gap: 12px; align-items: start;">
+          <div style="background: var(--success); color: white; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0;">⚡</div>
+          <div style="flex: 1;">
+            <div style="font-size: 15px; font-weight: 700; margin-bottom: 6px;">${win.title}</div>
+            <div style="font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 10px;">${win.description}</div>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+              <span style="background: var(--panel); padding: 4px 10px; border-radius: 6px; font-size: 12px; border: 1px solid var(--border);">⏱️ ${win.effort}</span>
+              <span style="background: rgba(16,185,129,0.1); color: var(--success); padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;">📈 ${win.impact}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+  
+  // Intangible Benefits
+  const benefitsEl = document.getElementById('exec-intangible-benefits');
+  if (roi.intangible_benefits && roi.intangible_benefits.length > 0) {
+    benefitsEl.innerHTML = roi.intangible_benefits.map(benefit => `
+      <div style="padding: 10px 12px; background: var(--bg); border-left: 3px solid var(--success); border-radius: 6px; font-size: 13px; line-height: 1.5;">
+        ✓ ${benefit}
+      </div>
+    `).join('');
+  }
+}
+
 document.getElementById('repoUrl').addEventListener('keydown', e => {
   if(e.key === 'Enter') analyze();
 });
 </script>
 </body>
 </html>
+
+

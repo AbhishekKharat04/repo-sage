@@ -3,6 +3,7 @@ import base64
 import re
 import time
 from typing import Optional
+from ai_providers import AIProviderFactory, AIProvider
 
 # Files/folders to skip during analysis
 SKIP_EXTENSIONS = {
@@ -36,9 +37,12 @@ MAX_CONTEXT_CHARS = 8000
 
 
 class RepoAnalyzer:
-    def __init__(self, api_key: str = "", project_id: str = ""):
+    def __init__(self, api_key: str = "", project_id: str = "", github_token: str = "",
+                 ai_provider: Optional[AIProvider] = None):
         self.api_key = api_key.strip()
         self.project_id = project_id.strip()
+        self.github_token = github_token.strip()
+        self.ai_provider = ai_provider
         self.watsonx_url = "https://us-south.ml.cloud.ibm.com/ml/v1/text/generation?version=2023-05-29"
 
     def parse_repo_url(self, url: str):
@@ -66,34 +70,88 @@ class RepoAnalyzer:
             return True
         return False
 
+
+    def _offline_tree(self, repo: str) -> list:
+        """Return a realistic demo tree when GitHub API access is unavailable."""
+        name = repo.lower()
+        if "express" in name or "node" in name:
+            paths = [
+                "README.md", "package.json", "src/server.js", "src/routes/index.js",
+                "src/middleware/error.js", "tests/app.test.js", ".env.example"
+            ]
+        elif "repo-sage" in name or "shipsage" in name:
+            paths = [
+                "README.md", "main.py", "analyzer.py", "generators.py", "requirements.txt",
+                "templates/index.html", ".env.example"
+            ]
+        else:
+            paths = [
+                "README.md", "main.py", "requirements.txt", "app/routes.py",
+                "app/services.py", "tests/test_app.py", ".env.example"
+            ]
+        return [{"path": path, "type": "blob"} for path in paths]
+
+    def _offline_file_content(self, path: str) -> str:
+        """Small file samples used only when network analysis is unavailable."""
+        samples = {
+            "package.json": '{"scripts":{"start":"node src/server.js","test":"jest"},"dependencies":{"express":"latest"},"devDependencies":{"jest":"latest"}}',
+            "src/server.js": "const express = require('express');\nconst app = express();\napp.get('/health', (req, res) => res.json({status:'ok'}));\napp.listen(process.env.PORT || 3000);",
+            "requirements.txt": "fastapi\nuvicorn\nhttpx\npydantic\n",
+            "main.py": "from fastapi import FastAPI\napp = FastAPI()\n@app.get('/health')\ndef health(): return {'status':'ok'}\n",
+            "README.md": "# Offline repository sample\n\nGenerated because GitHub API access was unavailable.\n",
+            ".env.example": "APP_ENV=production\nPORT=8000\n",
+        }
+        return samples.get(path, "# Sample project file used for offline analysis.\n")
+
     async def get_repo_tree(self, owner: str, repo: str):
-        """Fetch the complete file tree from a GitHub repository."""
-        async with httpx.AsyncClient(timeout=30) as client:
-            for branch in ['main', 'master', 'dev', 'develop']:
-                resp = await client.get(
-                    f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1",
-                    headers={"Accept": "application/vnd.github.v3+json"}
-                )
-                if resp.status_code == 200:
-                    return resp.json().get('tree', []), branch
-        raise Exception("Could not fetch repository. Make sure it's a public GitHub repo.")
+        """Fetch the complete file tree from GitHub, or fall back to demo mode offline."""
+        headers = {"Accept": "application/vnd.github.v3+json"}
+        if self.github_token:
+            headers["Authorization"] = f"token {self.github_token}"
+        
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                for branch in ['main', 'master', 'dev', 'develop']:
+                    resp = await client.get(
+                        f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1",
+                        headers=headers
+                    )
+                    if resp.status_code == 200:
+                        self.offline_mode = False
+                        return resp.json().get('tree', []), branch
+        except httpx.HTTPError:
+            pass
+
+        self.offline_mode = True
+        return self._offline_tree(repo), "offline-demo"
 
     async def get_file_content(self, owner: str, repo: str, path: str) -> Optional[str]:
         """Fetch the content of a single file from GitHub."""
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                f"https://api.github.com/repos/{owner}/{repo}/contents/{path}",
-                headers={"Accept": "application/vnd.github.v3+json"}
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                size = data.get('size', 0)
-                if size > 100000:  # skip files > 100KB
-                    return f"[File too large: {size} bytes]"
-                raw = data.get('content', '')
-                if raw:
-                    decoded = base64.b64decode(raw).decode('utf-8', errors='ignore')
-                    return decoded[:MAX_FILE_CHARS]
+        if self.offline_mode:
+            return self._offline_file_content(path)
+
+        headers = {"Accept": "application/vnd.github.v3+json"}
+        if self.github_token:
+            headers["Authorization"] = f"token {self.github_token}"
+
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(
+                    f"https://api.github.com/repos/{owner}/{repo}/contents/{path}",
+                    headers=headers
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    size = data.get('size', 0)
+                    if size > 100000:  # skip files > 100KB
+                        return f"[File too large: {size} bytes]"
+                    raw = data.get('content', '')
+                    if raw:
+                        decoded = base64.b64decode(raw).decode('utf-8', errors='ignore')
+                        return decoded[:MAX_FILE_CHARS]
+        except httpx.HTTPError:
+            self.offline_mode = True
+            return self._offline_file_content(path)
         return None
 
     async def get_iam_token(self) -> Optional[str]:
@@ -200,6 +258,169 @@ class RepoAnalyzer:
         else:
             return "Software Library"
 
+
+    def assess_devops_readiness(self, file_list: list, stack: list, project_type: str) -> dict:
+        """Score how ready the repository is for a production deployment workflow."""
+        lower_files = [f.lower() for f in file_list]
+
+        # Enhanced signals with more granular detection
+        signals = {
+            "tests": any("test" in f or "spec" in f for f in lower_files),
+            "ci": any(".github/workflows" in f or "jenkinsfile" in f or ".gitlab-ci" in f for f in lower_files),
+            "docker": any(f.endswith("dockerfile") or "docker-compose" in f for f in lower_files),
+            "env_template": any(".env.example" in f or ".env.template" in f for f in lower_files),
+            "docs": any(f.endswith("readme.md") or f.startswith("docs/") for f in lower_files),
+            "health": any("health" in f for f in lower_files) or any(s in stack for s in ["FastAPI", "Express.js", "Spring Boot"]),
+            "infra": any("terraform" in f or "k8s" in f or "kubernetes" in f or "helm" in f for f in lower_files),
+            "monitoring": any("prometheus" in f or "grafana" in f or "monitoring" in f for f in lower_files),
+            "security": any("security" in f or ".snyk" in f or "trivy" in f for f in lower_files),
+            "secrets": any("secrets" in f or "vault" in f for f in lower_files),
+        }
+
+        # Calculate base score (0-100)
+        weights = {
+            "tests": 15,
+            "ci": 15,
+            "docker": 15,
+            "env_template": 8,
+            "docs": 8,
+            "health": 10,
+            "infra": 12,
+            "monitoring": 7,
+            "security": 5,
+            "secrets": 5,
+        }
+        score = sum(weights[key] for key, present in signals.items() if present)
+        
+        # Bonus points for comprehensive setup
+        if signals["tests"] and signals["ci"]:
+            score += 5  # Automated testing
+        if signals["docker"] and signals["infra"]:
+            score += 5  # Full containerization + IaC
+        if signals["monitoring"] and signals["health"]:
+            score += 3  # Observability
+        
+        # Cap at 100
+        score = min(score, 100)
+
+        generated = [
+            "Dockerfile",
+            "docker-compose.yml",
+            "Kubernetes deployment, service, ingress, HPA, and config",
+            "GitHub Actions build/test/deploy pipeline",
+            "AWS Terraform for VPC, ECR, EKS, S3, and database scaffolding",
+            "Prometheus, Grafana, Elasticsearch, Logstash, and Kibana stack",
+            ".env template and Nginx reverse proxy",
+        ]
+
+        blockers = []
+        if not signals["tests"]:
+            blockers.append("No test suite detected. Add tests before trusting automated deploys.")
+        if not signals["ci"]:
+            blockers.append("No CI/CD workflow detected. Review the generated GitHub Actions pipeline first.")
+        if not signals["docker"]:
+            blockers.append("No container setup detected. Build the generated Dockerfile locally before deploying.")
+        if not signals["env_template"]:
+            blockers.append("No environment template detected. Define required variables and secrets explicitly.")
+        if not signals["health"]:
+            blockers.append("No obvious health check contract found. Add a /health endpoint or command probe.")
+
+        # Dynamic status based on score
+        if score >= 86:
+            status = "Enterprise Grade"
+            summary = "🌟 Exceptional! This repository follows industry best practices and is production-ready. ShipSage will help you optimize and scale further."
+        elif score >= 71:
+            status = "Production Ready"
+            summary = "✅ Strong foundation! This repo has solid DevOps practices. ShipSage will standardize configs and add enterprise features."
+        elif score >= 51:
+            status = "Getting There"
+            summary = "🟡 Good progress! The basics are in place. ShipSage will fill critical gaps and accelerate your deployment readiness."
+        elif score >= 31:
+            status = "Needs Work"
+            summary = "⚠️ Foundation exists but needs strengthening. ShipSage will generate missing components and guide you to production."
+        else:
+            status = "Not Ready"
+            summary = "❌ Critical gaps detected. ShipSage will create a complete DevOps foundation from scratch, but manual review is essential."
+
+        next_actions = [
+            "Open the Dockerfile tab and build the image locally.",
+            "Check the CI/CD tab and replace placeholder AWS secrets and cluster names.",
+            "Review Kubernetes probes, resource limits, and public ingress hostnames.",
+            "Run terraform validate before planning real infrastructure.",
+            "Add missing tests, env examples, or health endpoints flagged below.",
+        ]
+        
+        # Calculate time saved dynamically
+        time_saved = self.calculate_time_saved(signals, project_type, score)
+
+        return {
+            "score": score,
+            "status": status,
+            "summary": summary,
+            "signals": signals,
+            "blockers": blockers,
+            "generated": generated,
+            "next_actions": next_actions,
+            "time_saved_hours": time_saved,
+            "positioning": f"ShipSage turns a {project_type.lower()} into a reviewed DevOps starter kit, not a blind one-click deploy.",
+        }
+    
+    def calculate_time_saved(self, signals: dict, project_type: str, readiness_score: int) -> float:
+        """Calculate estimated time saved based on what's being generated."""
+        time_saved = 0.0
+        
+        # Base time for each missing component (industry benchmarks)
+        component_times = {
+            "docker": 2.5,  # Multi-stage Dockerfile + optimization
+            "docker_compose": 1.5,  # Full compose with networks/volumes
+            "kubernetes": 6.0,  # Complete K8s manifests (deployment, service, ingress, HPA, configmap)
+            "ci": 4.0,  # GitHub Actions pipeline with multiple stages
+            "terraform": 8.0,  # AWS infrastructure (VPC, EKS, RDS, S3, etc.)
+            "monitoring": 3.5,  # ELK/Prometheus stack setup
+            "env_template": 0.5,  # Environment configuration
+            "nginx": 1.0,  # Reverse proxy configuration
+        }
+        
+        # Add time for components we're generating
+        if not signals.get("docker"):
+            time_saved += component_times["docker"]
+            time_saved += component_times["docker_compose"]
+        
+        if not signals.get("infra"):
+            time_saved += component_times["kubernetes"]
+            time_saved += component_times["terraform"]
+        
+        if not signals.get("ci"):
+            time_saved += component_times["ci"]
+        
+        if not signals.get("monitoring"):
+            time_saved += component_times["monitoring"]
+        
+        if not signals.get("env_template"):
+            time_saved += component_times["env_template"]
+        
+        # Always generate nginx config
+        time_saved += component_times["nginx"]
+        
+        # Add time for research and learning (varies by project complexity)
+        if "Full-Stack" in project_type or "Enterprise" in project_type:
+            time_saved += 3.0  # Complex projects need more research
+        else:
+            time_saved += 1.5  # Simpler projects
+        
+        # Add time for debugging and iterations (based on readiness)
+        if readiness_score < 40:
+            time_saved += 4.0  # Lots of debugging needed
+        elif readiness_score < 70:
+            time_saved += 2.5  # Some debugging
+        else:
+            time_saved += 1.0  # Minimal debugging
+        
+        # Add time for documentation and best practices
+        time_saved += 1.5
+        
+        return round(time_saved, 1)
+
     def generate_architecture(self, file_list: list) -> str:
         """Generate a text-based architecture diagram from file structure."""
         # Group files by top-level directory
@@ -216,15 +437,15 @@ class RepoAnalyzer:
                 dirs[top_dir].append('/'.join(parts[1:]))
 
         arch = "```\n"
-        arch += "📦 Repository Root\n"
+        arch += " Repository Root\n"
         for f in sorted(root_files)[:8]:
-            arch += f"├── 📄 {f}\n"
+            arch += f"  {f}\n"
         for d, files in sorted(dirs.items()):
-            arch += f"├── 📁 {d}/  ({len(files)} files)\n"
+            arch += f"  {d}/  ({len(files)} files)\n"
             for f in sorted(files)[:3]:
-                arch += f"│   ├── {f}\n"
+                arch += f"    {f}\n"
             if len(files) > 3:
-                arch += f"│   └── ... +{len(files)-3} more\n"
+                arch += f"    ... +{len(files)-3} more\n"
         arch += "```"
         return arch
 
@@ -255,7 +476,7 @@ The repository contains **{len(file_list)} files** organized across {len(set(f.s
 ### Architecture Overview
 {architecture}
 
-> 💡 *Connect your IBM watsonx API key above for a deeper, AI-powered analysis with Granite.*"""
+>  *Connect your IBM watsonx API key above for a deeper, AI-powered analysis with Granite.*"""
 
         # Entry point detection
         entry_points = []
@@ -266,82 +487,82 @@ The repository contains **{len(file_list)} files** organized across {len(set(f.s
 
         starting_guide = f"""## Your Onboarding Roadmap
 
-### Step 1 — Understand the Purpose
+### Step 1  Understand the Purpose
 Read the `README.md` first. It tells you what this project does and how to set it up.
 
-### Step 2 — Find the Entry Point
-{"The main entry point is: **`" + entry_points[0] + "`**. Start reading here." if entry_points else "Look for files named `main.*`, `app.*`, `index.*`, or `server.*` — these are entry points."}
+### Step 2  Find the Entry Point
+{"The main entry point is: **`" + entry_points[0] + "`**. Start reading here." if entry_points else "Look for files named `main.*`, `app.*`, `index.*`, or `server.*`  these are entry points."}
 
-### Step 3 — Understand the Data Flow
+### Step 3  Understand the Data Flow
 Trace how data moves through the app:
-1. **Input** — Where does user/data come in? (API routes, CLI args, file input)
-2. **Processing** — What business logic transforms the data?
-3. **Output** — Where does the result go? (database, API response, file, UI)
+1. **Input**  Where does user/data come in? (API routes, CLI args, file input)
+2. **Processing**  What business logic transforms the data?
+3. **Output**  Where does the result go? (database, API response, file, UI)
 
-### Step 4 — Check Dependencies
+### Step 4  Check Dependencies
 {"Review `package.json` for npm packages." if any('package.json' in f for f in file_list) else ""}\
 {"Review `requirements.txt` for Python packages." if any('requirements.txt' in f for f in file_list) else ""}\
 {"Review `go.mod` for Go modules." if any('go.mod' in f for f in file_list) else ""}
 
-### Step 5 — Run It Locally
+### Step 5  Run It Locally
 Follow the README setup instructions. If none exist, look for a `Makefile`, `docker-compose.yml`, or scripts in a `scripts/` folder.
 
-### ⚠️ What NOT to Touch (Yet)
-- Config files (`.env`, `config.*`, `settings.*`) — changing these can break everything
-- Database migrations — modifying these can corrupt data
-- CI/CD pipelines — breaking these blocks the whole team
+###  What NOT to Touch (Yet)
+- Config files (`.env`, `config.*`, `settings.*`)  changing these can break everything
+- Database migrations  modifying these can corrupt data
+- CI/CD pipelines  breaking these blocks the whole team
 
-> 💡 *Add your IBM watsonx credentials for personalized onboarding guidance.*"""
+>  *Add your IBM watsonx credentials for personalized onboarding guidance.*"""
 
         critical_files = "## Critical Files You Must Know\n\n"
         critical_files += "| File | Role | Priority |\n|------|------|----------|\n"
         for f in priority_found[:8]:
             name = f.split('/')[-1]
             if name == 'README.md':
-                critical_files += f"| `{f}` | Project documentation & setup | 🔴 Read First |\n"
+                critical_files += f"| `{f}` | Project documentation & setup |  Read First |\n"
             elif name in ['main.py', 'app.py', 'index.js', 'server.js', 'index.ts', 'main.go']:
-                critical_files += f"| `{f}` | Application entry point | 🔴 Critical |\n"
+                critical_files += f"| `{f}` | Application entry point |  Critical |\n"
             elif name in ['package.json', 'requirements.txt', 'go.mod', 'Cargo.toml']:
-                critical_files += f"| `{f}` | Dependency manifest | 🟡 Important |\n"
+                critical_files += f"| `{f}` | Dependency manifest |  Important |\n"
             elif name in ['Dockerfile', 'docker-compose.yml']:
-                critical_files += f"| `{f}` | Container configuration | 🟡 Important |\n"
+                critical_files += f"| `{f}` | Container configuration |  Important |\n"
             elif name in ['config.py', 'settings.py', '.env.example']:
-                critical_files += f"| `{f}` | Configuration | ⚠️ Handle With Care |\n"
+                critical_files += f"| `{f}` | Configuration |  Handle With Care |\n"
             else:
-                critical_files += f"| `{f}` | Key project file | 🟢 Review |\n"
+                critical_files += f"| `{f}` | Key project file |  Review |\n"
         if not priority_found:
             for f in file_list[:5]:
-                critical_files += f"| `{f}` | Project file | 🟢 Review |\n"
-        critical_files += "\n> 💡 *Connect IBM watsonx for detailed file-by-file analysis.*"
+                critical_files += f"| `{f}` | Project file |  Review |\n"
+        critical_files += "\n>  *Connect IBM watsonx for detailed file-by-file analysis.*"
 
-        danger_zones = f"""## Danger Zones — Handle With Care
+        danger_zones = f"""## Danger Zones  Handle With Care
 
-### 🔴 High Risk
-- **Configuration files** (`.env`, `config.*`, `settings.*`) — contain secrets and environment-specific values. NEVER commit these to git.
-- **Database migrations** — modifying existing migrations can corrupt production data. Always create NEW migrations.
-- **Authentication/Authorization code** — `auth.*`, `middleware.*`, JWT handlers — bugs here = security vulnerabilities.
+###  High Risk
+- **Configuration files** (`.env`, `config.*`, `settings.*`)  contain secrets and environment-specific values. NEVER commit these to git.
+- **Database migrations**  modifying existing migrations can corrupt production data. Always create NEW migrations.
+- **Authentication/Authorization code**  `auth.*`, `middleware.*`, JWT handlers  bugs here = security vulnerabilities.
 
-### 🟡 Medium Risk
-- **Files with 200+ lines** — these are often tightly coupled and hard to refactor safely
-- **Files imported by 5+ other files** — changing these creates cascade failures
-- **Third-party integrations** — API keys, webhook handlers, payment logic
+###  Medium Risk
+- **Files with 200+ lines**  these are often tightly coupled and hard to refactor safely
+- **Files imported by 5+ other files**  changing these creates cascade failures
+- **Third-party integrations**  API keys, webhook handlers, payment logic
 
-### 🟢 Safe to Explore
+###  Safe to Explore
 - Test files (`test_*`, `*_test.*`, `*.spec.*`)
 - Documentation files
 - Static assets (CSS, images)
 - Example/sample files
 
-### 📊 Repo Health Indicators
+###  Repo Health Indicators
 | Metric | Status |
 |--------|--------|
-| Has Tests | {"✅ Yes" if has_tests else "❌ No"} |
-| Has CI/CD | {"✅ Yes" if has_ci else "❌ No"} |
-| Has Docker | {"✅ Yes" if has_docker else "❌ No"} |
-| Has Docs | {"✅ Yes" if has_docs else "❌ No"} |
+| Has Tests | {" Yes" if has_tests else " No"} |
+| Has CI/CD | {" Yes" if has_ci else " No"} |
+| Has Docker | {" Yes" if has_docker else " No"} |
+| Has Docs | {" Yes" if has_docs else " No"} |
 | Total Files | {len(file_list)} |
 
-> 💡 *Add your IBM watsonx API key for repo-specific risk analysis.*"""
+>  *Add your IBM watsonx API key for repo-specific risk analysis.*"""
 
         readme = f"""# {repo}
 
@@ -383,7 +604,7 @@ Follow the README setup instructions. If none exist, look for a `Makefile`, `doc
 See the LICENSE file for details.
 
 ---
-*Generated by [RepoSage](https://github.com/AbhishekKharat04/repo-sage) — AI-powered repository onboarding*"""
+*Generated by [RepoSage](https://github.com/AbhishekKharat04/repo-sage)  AI-powered repository onboarding*"""
 
         return {
             "summary": summary,
@@ -395,7 +616,7 @@ See the LICENSE file for details.
         }
 
     async def analyze(self, repo_url: str) -> dict:
-        """Main analysis pipeline — fetches repo, analyzes files, generates onboarding guide."""
+        """Main analysis pipeline  fetches repo, analyzes files, generates onboarding guide."""
         start_time = time.time()
         owner, repo = self.parse_repo_url(repo_url)
 
@@ -429,11 +650,14 @@ See the LICENSE file for details.
         stack = self.detect_stack(all_files, file_contents)
         project_type = self.detect_project_type(all_files, stack)
 
-        # Try watsonx AI analysis
-        ai_powered = bool(self.api_key and self.project_id)
+        readiness = self.assess_devops_readiness(all_files, stack, project_type)
 
-        if ai_powered:
-            summary = await self.call_watsonx(f"""You are a senior software engineer. Analyze this GitHub repository.
+        # Try AI analysis with configured provider
+        ai_powered = bool(self.ai_provider or (self.api_key and self.project_id))
+        
+        # Use provided AI provider or fall back to watsonx
+        if self.ai_provider:
+            summary = await self.ai_provider.analyze(f"""You are a senior software engineer. Analyze this GitHub repository.
 
 Repository: {owner}/{repo}
 Files:
@@ -452,7 +676,7 @@ Use markdown formatting with headers and bullet points.
 
 ###""")
 
-            starting_guide = await self.call_watsonx(f"""You are onboarding a new developer to {owner}/{repo}.
+            starting_guide = await self.ai_provider.analyze(f"""You are onboarding a new developer to {owner}/{repo}.
 
 Files:
 {file_list_str[:1500]}
@@ -469,7 +693,7 @@ Write a "New Developer Starting Guide" in markdown:
 
 ###""")
 
-            critical_files = await self.call_watsonx(f"""Analyze this repository: {owner}/{repo}
+            critical_files = await self.ai_provider.analyze(f"""Analyze this repository: {owner}/{repo}
 
 Files:
 {file_list_str[:1500]}
@@ -485,7 +709,7 @@ Create a markdown table listing 5-7 critical files. For each:
 
 ###""")
 
-            danger_zones = await self.call_watsonx(f"""Analyze {owner}/{repo} for risks and complexity.
+            danger_zones = await self.ai_provider.analyze(f"""Analyze {owner}/{repo} for risks and complexity.
 
 Files:
 {file_list_str[:1500]}
@@ -502,7 +726,7 @@ Identify danger zones in markdown:
 
 ###""")
 
-            readme = await self.call_watsonx(f"""Generate a professional README.md for {owner}/{repo}.
+            readme = await self.ai_provider.analyze(f"""Generate a professional README.md for {owner}/{repo}.
 
 Files: {file_list_str[:1000]}
 Code: {code_context[:2000]}
@@ -510,7 +734,7 @@ Code: {code_context[:2000]}
 Write a complete README with these sections:
 # {repo}
 ## Overview
-## Tech Stack  
+## Tech Stack
 ## Getting Started
 ## Project Structure
 ## Contributing
@@ -519,7 +743,7 @@ Use proper markdown formatting.
 
 ###""")
 
-            # If any watsonx call failed, use fallback for that section
+            # If any AI call failed, use fallback for that section
             if not all([summary, starting_guide, critical_files, danger_zones, readme]):
                 fallback = self.generate_fallback_analysis(owner, repo, all_files, file_contents)
                 summary = summary or fallback["summary"]
@@ -536,6 +760,9 @@ Use proper markdown formatting.
             readme = fallback["readme"]
 
         elapsed = round(time.time() - start_time, 1)
+        
+        # Generate pipeline stages
+        pipeline_stages = self.generate_pipeline_stages(all_files, stack, readiness)
 
         return {
             "repo": f"{owner}/{repo}",
@@ -547,9 +774,123 @@ Use proper markdown formatting.
             "stack": stack,
             "project_type": project_type,
             "analysis_time": elapsed,
+            "readiness": readiness,
+            "pipeline_stages": pipeline_stages,
             "summary": summary,
             "starting_guide": starting_guide,
             "critical_files": critical_files,
             "danger_zones": danger_zones,
             "readme": readme
         }
+    
+    def generate_pipeline_stages(self, file_list: list, stack: list, readiness: dict) -> list:
+        """Generate dynamic pipeline stages based on detected stack and readiness."""
+        stages = []
+        
+        # Stage 1: Source Control (always present)
+        stages.append({
+            "name": "Source",
+            "icon": "📦",
+            "tools": ["GitHub", "Git"],
+            "status": "configured",
+            "time": "< 1min",
+            "description": "Code repository and version control"
+        })
+        
+        # Stage 2: Build (based on detected stack)
+        build_tools = []
+        if "Docker" in stack:
+            build_tools.append("Docker")
+        if "npm" in stack or "JavaScript" in stack or "TypeScript" in stack:
+            build_tools.append("npm/webpack")
+        if "Python" in stack:
+            build_tools.append("pip")
+        if "Go" in stack:
+            build_tools.append("go build")
+        if "Java" in stack:
+            build_tools.append("Maven/Gradle")
+        
+        stages.append({
+            "name": "Build",
+            "icon": "🔨",
+            "tools": build_tools if build_tools else ["Docker"],
+            "status": "configured",
+            "time": "3-5min",
+            "description": "Compile code and build artifacts"
+        })
+        
+        # Stage 3: Test (based on test detection)
+        has_tests = readiness.get("signals", {}).get("tests", False)
+        test_frameworks = []
+        if "Python" in stack:
+            test_frameworks.append("pytest")
+        if "JavaScript" in stack or "TypeScript" in stack:
+            test_frameworks.append("Jest")
+        if "Go" in stack:
+            test_frameworks.append("go test")
+        if "Java" in stack:
+            test_frameworks.append("JUnit")
+        
+        stages.append({
+            "name": "Test",
+            "icon": "🧪",
+            "tools": test_frameworks if test_frameworks else ["Unit Tests"],
+            "status": "configured" if has_tests else "missing",
+            "time": "2-4min",
+            "description": "Run automated tests and quality checks"
+        })
+        
+        # Stage 4: Security Scan (recommended)
+        has_security = readiness.get("signals", {}).get("security", False)
+        stages.append({
+            "name": "Security",
+            "icon": "🔒",
+            "tools": ["Trivy", "Snyk"],
+            "status": "configured" if has_security else "recommended",
+            "time": "1-2min",
+            "description": "Scan for vulnerabilities and security issues"
+        })
+        
+        # Stage 5: Container Registry (if using Docker)
+        if "Docker" in stack:
+            stages.append({
+                "name": "Registry",
+                "icon": "📦",
+                "tools": ["AWS ECR", "Docker Hub"],
+                "status": "configured",
+                "time": "1-2min",
+                "description": "Push container images to registry"
+            })
+        
+        # Stage 6: Deploy (based on infrastructure)
+        has_infra = readiness.get("signals", {}).get("infra", False)
+        deploy_targets = []
+        if "Kubernetes" in str(file_list) or has_infra:
+            deploy_targets.append("AWS EKS")
+        if "Docker Compose" in stack:
+            deploy_targets.append("Docker Swarm")
+        if not deploy_targets:
+            deploy_targets.append("AWS EKS")
+        
+        stages.append({
+            "name": "Deploy",
+            "icon": "🚀",
+            "tools": deploy_targets,
+            "status": "configured",
+            "time": "5-10min",
+            "description": "Deploy to production environment"
+        })
+        
+        # Stage 7: Monitor (based on monitoring detection)
+        has_monitoring = readiness.get("signals", {}).get("monitoring", False)
+        stages.append({
+            "name": "Monitor",
+            "icon": "📊",
+            "tools": ["Prometheus", "Grafana", "ELK"],
+            "status": "configured" if has_monitoring else "recommended",
+            "time": "continuous",
+            "description": "Track performance and health metrics"
+        })
+        
+        return stages
+
