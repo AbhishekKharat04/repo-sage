@@ -130,13 +130,31 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 /* Overview View */
 .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 32px; }
 .metric-card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 24px; position: relative; overflow: hidden; box-shadow: var(--card-shadow); transition: 0.3s; }
+.metric-card:hover { transform: translateY(-4px); }
 .metric-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--primary); }
+.metric-card::after { content: ''; position: absolute; inset: 0; border-radius: 16px; padding: 1px; background: linear-gradient(135deg, rgba(59,130,246,0.4), transparent 60%); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0; transition: 0.3s; pointer-events: none; }
+.metric-card:hover::after { opacity: 1; }
+.metric-card:nth-child(1):hover { box-shadow: 0 0 30px rgba(59,130,246,0.15); }
 .metric-card:nth-child(2)::before { background: var(--accent); }
+.metric-card:nth-child(2)::after { background: linear-gradient(135deg, rgba(139,92,246,0.4), transparent 60%); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.metric-card:nth-child(2):hover { box-shadow: 0 0 30px rgba(139,92,246,0.15); }
 .metric-card:nth-child(3)::before { background: var(--success); }
+.metric-card:nth-child(3)::after { background: linear-gradient(135deg, rgba(16,185,129,0.4), transparent 60%); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.metric-card:nth-child(3):hover { box-shadow: 0 0 30px rgba(16,185,129,0.15); }
 .metric-card:nth-child(4)::before { background: var(--ibm); }
+.metric-card:nth-child(4)::after { background: linear-gradient(135deg, rgba(15,98,254,0.4), transparent 60%); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.metric-card:nth-child(4):hover { box-shadow: 0 0 30px rgba(15,98,254,0.15); }
 .metric-title { font-size: 13px; color: var(--text-muted); font-weight: 600; margin-bottom: 8px; text-transform: uppercase; }
 .metric-value { font-size: 32px; font-weight: 800; margin-bottom: 4px; }
 .metric-sub { font-size: 12px; color: var(--text-muted); }
+
+/* AI Recommendations */
+.recs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.rec-item { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; transition: 0.3s; }
+.rec-item:hover { border-color: var(--primary); transform: translateY(-2px); }
+.rec-icon { font-size: 24px; margin-bottom: 8px; }
+.rec-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.rec-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
 
 .dashboard-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 24px;}
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: var(--card-shadow); transition: 0.3s;}
@@ -287,6 +305,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
       </div>
       <div class="topbar-actions">
         <button class="btn-outline" onclick="toggleTheme()" id="dash-theme-btn">☀️ Light Mode</button>
+        <button class="btn-outline" onclick="downloadAllFiles()" style="background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.3);color:#10b981;">📦 Download All</button>
         <button class="btn-outline" onclick="location.reload()">+ New Project</button>
       </div>
     </header>
@@ -366,6 +385,18 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
             <div class="chart-container">
               <canvas id="complexityChart"></canvas>
             </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-title"><i>🤖</i> AI DevOps Recommendations</div>
+          <div class="recs-grid" id="ai-recs">
+            <div class="rec-item"><div class="rec-icon">🔒</div><div class="rec-title">Add Secrets Manager</div><div class="rec-desc">Use AWS Secrets Manager or HashiCorp Vault instead of .env files in production for better security.</div></div>
+            <div class="rec-item"><div class="rec-icon">📊</div><div class="rec-title">Enable APM</div><div class="rec-desc">Add Application Performance Monitoring (Datadog, New Relic) to track latency and error rates in real-time.</div></div>
+            <div class="rec-item"><div class="rec-icon">🔄</div><div class="rec-title">Blue-Green Deploys</div><div class="rec-desc">Configure blue-green or canary deployments in your K8s setup for zero-downtime releases.</div></div>
+            <div class="rec-item"><div class="rec-icon">🛡️</div><div class="rec-title">Container Scanning</div><div class="rec-desc">Add Trivy or Snyk to your CI/CD pipeline to scan Docker images for vulnerabilities before deploy.</div></div>
+            <div class="rec-item"><div class="rec-icon">💾</div><div class="rec-title">Backup Strategy</div><div class="rec-desc">Set up automated database backups with point-in-time recovery using AWS RDS snapshots.</div></div>
+            <div class="rec-item"><div class="rec-icon">⚡</div><div class="rec-title">CDN & Caching</div><div class="rec-desc">Add CloudFront CDN and Redis caching layer to reduce latency by 60% for static assets.</div></div>
           </div>
         </div>
       </div>
@@ -725,6 +756,35 @@ function downloadFile(id, filename) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
+}
+
+function downloadAllFiles() {
+  const files = [
+    ['dockerfile', 'Dockerfile'],
+    ['compose', 'docker-compose.yml'],
+    ['kubernetes', 'k8s-manifests.yaml'],
+    ['cicd', 'main.yml'],
+    ['aws_terraform', 'main.tf'],
+    ['monitoring', 'monitoring.yml'],
+    ['env_config', '.env.template']
+  ];
+  files.forEach(([id, name], i) => {
+    setTimeout(() => downloadFile(id, name), i * 300);
+  });
+}
+
+function animateValue(el, end, suffix) {
+  let start = 0;
+  const duration = 1000;
+  const startTime = performance.now();
+  function update(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(eased * end) + (suffix || '');
+    if (progress < 1) requestAnimationFrame(update);
+  }
+  requestAnimationFrame(update);
 }
 
 document.getElementById('repoUrl').addEventListener('keydown', e => {
