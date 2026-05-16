@@ -123,10 +123,13 @@ async def analyze_repo(data: AnalyzeRequest):
         elif data.ai_provider == "rule-based":
             ai_provider = AIProviderFactory.create_provider("rule-based")
         
+        # Use server-side GITHUB_TOKEN as fallback if not provided by user
+        github_token = data.github_token or os.getenv("GITHUB_TOKEN", "")
+        
         analyzer = RepoAnalyzer(
             api_key=data.watsonx_api_key,
             project_id=data.watsonx_project_id,
-            github_token=data.github_token,
+            github_token=github_token,
             ai_provider=ai_provider
         )
         analysis = await analyzer.analyze(data.repo_url)

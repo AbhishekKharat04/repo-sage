@@ -266,13 +266,13 @@ class RepoAnalyzer:
         # Enhanced signals with more granular detection
         signals = {
             "tests": any("test" in f or "spec" in f for f in lower_files),
-            "ci": any(".github/workflows" in f or "jenkinsfile" in f or ".gitlab-ci" in f for f in lower_files),
-            "docker": any(f.endswith("dockerfile") or "docker-compose" in f for f in lower_files),
-            "env_template": any(".env.example" in f or ".env.template" in f for f in lower_files),
+            "ci": any(".github/workflows" in f or "jenkinsfile" in f or ".gitlab-ci" in f or ".circleci" in f for f in lower_files),
+            "docker": any("dockerfile" in f or "docker-compose" in f for f in lower_files),
+            "env_template": any(".env.example" in f or ".env.template" in f or ".env.sample" in f for f in lower_files),
             "docs": any(f.endswith("readme.md") or f.startswith("docs/") for f in lower_files),
             "health": any("health" in f for f in lower_files) or any(s in stack for s in ["FastAPI", "Express.js", "Spring Boot"]),
-            "infra": any("terraform" in f or "k8s" in f or "kubernetes" in f or "helm" in f for f in lower_files),
-            "monitoring": any("prometheus" in f or "grafana" in f or "monitoring" in f for f in lower_files),
+            "infra": any("terraform" in f or "k8s" in f or "kubernetes" in f or "helm" in f or "docker-compose" in f or "makefile" in f for f in lower_files),
+            "monitoring": any("prometheus" in f or "grafana" in f or "monitoring" in f or "log-monitor" in f or "logging" in f for f in lower_files),
             "security": any("security" in f or ".snyk" in f or "trivy" in f for f in lower_files),
             "secrets": any("secrets" in f or "vault" in f for f in lower_files),
         }
