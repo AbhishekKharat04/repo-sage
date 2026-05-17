@@ -279,7 +279,13 @@ File Contents:
 
 User Question: {data.question}
 
-Answer the question clearly and concisely based on the actual file contents above. Reference specific files, classes, or functions where relevant. If the information isn't in the provided files, say so honestly."""
+Please provide a highly detailed, analytical, and well-structured answer. 
+- Use multi-paragraph markdown formatting.
+- Reference specific files, modules, classes, or functions from the provided file contents.
+- Explain your reasoning clearly, inferring architectural patterns where appropriate.
+- If the exact answer isn't explicitly in the files, use your expert knowledge to infer how the system likely handles it based on the tech stack and architecture.
+
+Detailed Answer:"""
 
             answer = await ai_provider.analyze(prompt)
             if answer:
