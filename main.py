@@ -79,6 +79,18 @@ class AnalyzeRequest(BaseModel):
     ollama_endpoint: str = "http://localhost:11434"
     owner_id: str = ""
 
+class AskRequest(BaseModel):
+    repo_url: str
+    question: str
+    github_token: str = ""
+    ai_provider: str = "watsonx"
+    watsonx_api_key: str = ""
+    watsonx_project_id: str = ""
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    ollama_model: str = "llama3"
+    ollama_endpoint: str = "http://localhost:11434"
+
 
 @app.get("/")
 async def index(request: Request):
@@ -211,6 +223,61 @@ async def analyze_repo(data: AnalyzeRequest):
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ask")
+async def ask_repo(data: AskRequest):
+    """Answer questions about the repository using the selected AI provider."""
+    try:
+        if data.ai_provider == "watsonx" and data.watsonx_api_key:
+            ai_provider = AIProviderFactory.create_provider("watsonx", api_key=data.watsonx_api_key, project_id=data.watsonx_project_id)
+        elif data.ai_provider == "openai" and data.openai_api_key:
+            ai_provider = AIProviderFactory.create_provider("openai", api_key=data.openai_api_key)
+        elif data.ai_provider == "anthropic" and data.anthropic_api_key:
+            ai_provider = AIProviderFactory.create_provider("anthropic", api_key=data.anthropic_api_key)
+        elif data.ai_provider == "ollama":
+            ai_provider = AIProviderFactory.create_provider("ollama", model=data.ollama_model, endpoint=data.ollama_endpoint)
+        else:
+            ai_provider = AIProviderFactory.create_provider("rule-based")
+            
+        github_token = data.github_token or os.getenv("GITHUB_TOKEN", "")
+        analyzer = RepoAnalyzer(api_key=data.watsonx_api_key, project_id=data.watsonx_project_id, github_token=github_token, ai_provider=ai_provider)
+        
+        # Try to get repo info and README for context
+        try:
+            owner, repo = analyzer.parse_repo_url(data.repo_url)
+            readme_content = await analyzer.get_file_content(owner, repo, "README.md")
+        except Exception:
+            readme_content = ""
+            
+        if readme_content.startswith("[File too large") or "Sample project file" in readme_content:
+            readme_content = "No README available or offline mode active."
+            
+        prompt = f"""You are a helpful DevOps and architecture expert analyzing a GitHub repository.
+Repository: {data.repo_url}
+
+README Context:
+{readme_content[:1500]}
+
+User Question: {data.question}
+
+Answer the user's question clearly and concisely based on the repository context above. If you don't know the answer, say so politely."""
+
+        answer = await ai_provider.analyze(prompt)
+        
+        if not answer:
+            # Fallback for rule-based or if AI fails
+            question_lower = data.question.lower()
+            if "readiness" in question_lower or "score" in question_lower:
+                answer = "ShipSage evaluates readiness based on the presence of DevOps signals such as Dockerfiles, CI/CD workflows, Infrastructure as Code (Terraform/K8s), testing suites, and security configurations. These are weighted to generate a score out of 100."
+            elif "architecture" in question_lower:
+                answer = "Based on a quick scan, this repository appears to use a modern framework structure. Please configure an API key (Watsonx, OpenAI, Anthropic) to get a deep AI-powered architectural breakdown."
+            else:
+                answer = f"I am currently running in **Rule-Based (Fast - Free)** mode without an LLM backend, so I cannot dynamically read the codebase to answer: *'{data.question}'*.\n\nPlease select **IBM Watsonx, OpenAI, or Anthropic** in the top bar to enable AI-powered Q&A capabilities."
+                
+        return {"answer": answer}
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

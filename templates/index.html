@@ -525,6 +525,17 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
             <!-- Populated dynamically by renderRecommendations() -->
           </div>
         </div>
+
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-title"><i>💬</i> Ask Questions About This Repository</div>
+          <div id="chat-history" style="max-height: 300px; overflow-y: auto; margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+            <div style="font-size: 13px; color: var(--text-muted); text-align: center;">Ask anything about the repository architecture, setup, or code.</div>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <input type="text" id="chat-input" placeholder="How do I deploy this locally?" style="flex: 1; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text);">
+            <button id="chat-send" onclick="askRepo()" style="padding: 12px 24px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">Ask</button>
+          </div>
+        </div>
       </div>
       
       <!-- Executive Summary View -->
@@ -1687,6 +1698,88 @@ function renderRecommendations(signals, stack, projectType) {
 document.getElementById('repoUrl').addEventListener('keydown', e => {
   if(e.key === 'Enter') analyze();
 });
+
+document.getElementById('chat-input').addEventListener('keydown', e => {
+  if(e.key === 'Enter') askRepo();
+});
+
+async function askRepo() {
+  const inputEl = document.getElementById('chat-input');
+  const question = inputEl.value.trim();
+  const repoUrl = document.getElementById('repoUrl').value.trim();
+  if (!question || !repoUrl) return;
+  
+  const historyEl = document.getElementById('chat-history');
+  
+  // Remove placeholder if present
+  if (historyEl.innerHTML.includes('Ask anything')) {
+    historyEl.innerHTML = '';
+  }
+  
+  // Append user message
+  historyEl.innerHTML += `
+    <div style="margin-bottom: 12px;">
+      <div style="font-size: 12px; font-weight: bold; color: var(--text-muted); margin-bottom: 4px;">You:</div>
+      <div style="font-size: 14px; line-height: 1.5;">${question}</div>
+    </div>
+  `;
+  
+  inputEl.value = '';
+  historyEl.scrollTop = historyEl.scrollHeight;
+  
+  // Add loading indicator
+  const loadingId = 'loading-' + Date.now();
+  historyEl.innerHTML += `
+    <div id="${loadingId}" style="margin-bottom: 16px;">
+      <div style="font-size: 12px; font-weight: bold; color: var(--primary); margin-bottom: 4px;">ShipSage:</div>
+      <div style="font-size: 14px; color: var(--text-muted);">Thinking...</div>
+    </div>
+  `;
+  historyEl.scrollTop = historyEl.scrollHeight;
+  
+  try {
+    const aiProvider = document.getElementById('ai-provider').value;
+    const watsonxApiKey = document.getElementById('watsonxApiKey')?.value || '';
+    const watsonxProjectId = document.getElementById('watsonxProjectId')?.value || '';
+    const openaiApiKey = document.getElementById('openaiApiKey')?.value || '';
+    
+    const resp = await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo_url: repoUrl,
+        question: question,
+        ai_provider: aiProvider,
+        watsonx_api_key: watsonxApiKey,
+        watsonx_project_id: watsonxProjectId,
+        openai_api_key: openaiApiKey,
+      })
+    });
+    
+    document.getElementById(loadingId).remove();
+    
+    if (resp.ok) {
+      const data = await resp.json();
+      historyEl.innerHTML += `
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 12px; font-weight: bold; color: var(--primary); margin-bottom: 4px;">ShipSage:</div>
+          <div style="font-size: 14px; line-height: 1.5; padding-left: 10px; border-left: 2px solid var(--primary);">${data.answer.replace(/\\n/g, '<br>')}</div>
+        </div>
+      `;
+    } else {
+      historyEl.innerHTML += `
+        <div style="margin-bottom: 16px; color: var(--error);">Failed to get answer. Make sure a valid repo is analyzed.</div>
+      `;
+    }
+  } catch (e) {
+    document.getElementById(loadingId)?.remove();
+    historyEl.innerHTML += `
+      <div style="margin-bottom: 16px; color: var(--error);">Network error.</div>
+    `;
+  }
+  
+  historyEl.scrollTop = historyEl.scrollHeight;
+}
 
 // Render history on page load
 window.addEventListener('load', () => renderProjectHistory());
