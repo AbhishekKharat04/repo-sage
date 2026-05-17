@@ -1,4 +1,4 @@
-# Setup Guide — RepoSage
+# Setup Guide - RepoSage
 
 ## Prerequisites
 - Python 3.10 or higher
@@ -32,14 +32,14 @@ For AI-powered analysis, you need IBM Cloud credentials:
 
 ### Get Your API Key
 1. Go to [IBM Cloud](https://cloud.ibm.com)
-2. Click your profile → **Manage** → **Access (IAM)**
-3. Click **API keys** → **Create an IBM Cloud API key**
+2. Click your profile -> **Manage** -> **Access (IAM)**
+3. Click **API keys** -> **Create an IBM Cloud API key**
 4. Copy the key
 
 ### Get Your watsonx Project ID
 1. Go to [watsonx.ai](https://dataplatform.cloud.ibm.com/wx/home)
 2. Open your project
-3. Click **Manage** tab → find the Project ID
+3. Click **Manage** tab -> find the Project ID
 
 ### Enter Credentials
 In the RepoSage UI, enter your API key and Project ID in the optional credentials fields. The analysis will automatically use IBM watsonx Granite.
@@ -63,4 +63,5 @@ RepoSage works perfectly without any API keys! It uses smart rule-based analysis
 
 ---
 
-*RepoSage — IBM Bob Hackathon 2026*
+*RepoSage - IBM Bob Hackathon 2026*
+
