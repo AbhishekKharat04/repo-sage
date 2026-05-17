@@ -249,24 +249,39 @@ async def ask_repo(data: AskRequest):
             ai_provider=ai_provider
         )
 
-        # Fetch multiple key files for rich context
-        context_parts = []
+        # Build RepoMind-style repository context for Q&A.
         owner, repo_name = analyzer.parse_repo_url(data.repo_url)
-        analyzer.offline_mode = False
-
-        key_files = [
-            "README.md", "main.py", "app.py", "requirements.txt",
-            "package.json", "analyzer.py", "Dockerfile", ".env.example"
+        tree, _branch = await analyzer.get_repo_tree(owner, repo_name)
+        all_files = [
+            f["path"] for f in tree
+            if f.get("type") == "blob" and not analyzer.should_skip(f.get("path", ""))
         ]
-        for kf in key_files:
-            try:
-                content = await analyzer.get_file_content(owner, repo_name, kf)
-                if content and "Sample project file" not in content and not content.startswith("[File too large"):
-                    context_parts.append(f"=== {kf} ===\n{content[:1200]}")
-            except Exception:
-                pass
 
-        repo_context = "\n\n".join(context_parts[:5]) if context_parts else "No file content available."
+        selected_files = analyzer.select_question_files(data.question, all_files, {}, limit=18)
+        file_contents = {}
+        for path in selected_files:
+            try:
+                content = await analyzer.get_file_content(owner, repo_name, path)
+                if content and not content.startswith("[File too large"):
+                    file_contents[path] = content
+            except Exception:
+                continue
+
+        # Re-rank once content is available so terms inside files matter too.
+        selected_files = analyzer.select_question_files(data.question, all_files, file_contents, limit=12)
+        for path in selected_files:
+            if path not in file_contents:
+                try:
+                    content = await analyzer.get_file_content(owner, repo_name, path)
+                    if content and not content.startswith("[File too large"):
+                        file_contents[path] = content
+                except Exception:
+                    continue
+
+        context_bundle = analyzer.build_context_bundle(data.question, all_files, file_contents)
+        repo_context = context_bundle["content"] if context_bundle["content"] else "No file content available."
+        repo_tree_context = context_bundle["tree"]
+        context_file_list = context_bundle["files"]
 
         # If LLM is available, use it with rich context
         if data.ai_provider != "rule-based":
@@ -274,14 +289,20 @@ async def ask_repo(data: AskRequest):
 
 Repository: {data.repo_url}
 
+Repository File Tree:
+{repo_tree_context}
+
+Selected Files Used As Evidence:
+{chr(10).join("- " + p for p in context_file_list)}
+
 File Contents:
 {repo_context}
 
 User Question: {data.question}
 
-Please provide a highly detailed, analytical, and well-structured answer. 
+Please provide a highly detailed, analytical, and well-structured answer grounded in the supplied repository evidence. 
 - Use multi-paragraph markdown formatting.
-- Reference specific files, modules, classes, or functions from the provided file contents.
+- Reference specific files, modules, classes, functions, constants, or scoring rules from the provided file contents.
 - Explain your reasoning clearly, inferring architectural patterns where appropriate.
 - If the exact answer isn't explicitly in the files, use your expert knowledge to infer how the system likely handles it based on the tech stack and architecture.
 
@@ -291,9 +312,9 @@ Detailed Answer:"""
             if answer:
                 return {"answer": answer}
 
-        # Intelligent rule-based fallback using actual file content
+        # Intelligent rule-based fallback using actual file content and file tree
         q = data.question.lower()
-        ctx = repo_context.lower()
+        ctx = (repo_context + "\n" + repo_tree_context).lower()
 
         # Detect what's in the repo from actual content
         has_fastapi = "fastapi" in ctx
@@ -311,8 +332,11 @@ Detailed Answer:"""
         db = "PostgreSQL" if has_postgres else "Redis" if has_redis else "the configured database"
 
         if any(w in q for w in ["readiness", "score", "how is it calculated", "accuracy"]):
+            evidence = "\n".join(f"- `{p}`" for p in context_file_list) or "- No specific files were available."
             answer = (
-                f"**ShipSage calculates readiness** by scanning the repository's file tree for DevOps signals:\n\n"
+                f"**Short answer:** ShipSage calculates readiness from repository evidence, not runtime testing. It scans the file tree and selected source/config files for production-readiness signals, then maps those signals to a weighted score.\n\n"
+                f"**Files used as evidence:**\n{evidence}\n\n"
+                f"**Scoring model:**\n"
                 f"- **Tests** (+15 pts) — presence of test files or `pytest`/`jest` configs\n"
                 f"- **CI/CD** (+20 pts) — GitHub Actions workflows or Jenkinsfile\n"
                 f"- **Docker** (+15 pts) — Dockerfile or docker-compose.yml\n"
@@ -321,7 +345,7 @@ Detailed Answer:"""
                 f"- **Monitoring** (+12 pts) — Prometheus, Grafana, or ELK configs\n"
                 f"- **Security** (+10 pts) — Snyk, Trivy, or security scan configs\n"
                 f"- **Infra as Code** (+10 pts) — Terraform, Kubernetes, or Helm charts\n\n"
-                f"Scores above 90 = Enterprise Grade. This repo currently has: "
+                f"This is a heuristic score, so its accuracy depends on whether the repository exposes clear files like CI workflows, Docker config, tests, env templates, monitoring, and security configs. This repo currently has: "
                 f"{'✅ Tests' if has_tests else '❌ Tests'}, "
                 f"{'✅ Docker' if has_docker else '❌ Docker'}, "
                 f"{'✅ CI/CD' if has_ci else '❌ CI/CD'}."

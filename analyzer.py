@@ -31,9 +31,9 @@ PRIORITY_FILES = {
     'config.py', 'settings.py', 'urls.py', 'routes.py'
 }
 
-MAX_FILE_CHARS = 2500
-MAX_FILES_TO_READ = 15
-MAX_CONTEXT_CHARS = 8000
+MAX_FILE_CHARS = 100000
+MAX_FILES_TO_READ = 50
+MAX_CONTEXT_CHARS = 50000
 
 
 class RepoAnalyzer:
@@ -216,6 +216,94 @@ class RepoAnalyzer:
                 if results:
                     return results[0].get('generated_text', '').strip()
         return None
+
+
+    def select_question_files(self, question: str, file_list: list, file_contents: dict | None = None, limit: int = 12) -> list:
+        """Select files most likely to answer a user question."""
+        q = (question or "").lower()
+        file_contents = file_contents or {}
+
+        topic_keywords = {
+            "readiness": ["readiness", "score", "signal", "blocker", "production", "accuracy", "assess"],
+            "security": ["security", "auth", "token", "secret", "jwt", "cors", "vulnerability", "compliance"],
+            "cost": ["cost", "price", "billing", "estimate", "aws", "cloud", "budget"],
+            "deploy": ["deploy", "docker", "kubernetes", "terraform", "ci", "cd", "github actions", "render", "server"],
+            "architecture": ["architecture", "structure", "module", "flow", "how does", "overview"],
+            "setup": ["setup", "install", "run", "local", "start", "environment", "env"],
+        }
+
+        wanted = set()
+        for topic, words in topic_keywords.items():
+            if any(word in q for word in words):
+                wanted.update(words)
+                wanted.add(topic)
+
+        # Always include documentation, entrypoints, and manifests.
+        base_names = {
+            "readme.md", "main.py", "app.py", "server.js", "index.js", "package.json",
+            "requirements.txt", "pyproject.toml", "dockerfile", "docker-compose.yml",
+            ".env.example", "makefile"
+        }
+
+        scored = []
+        for path in file_list:
+            lower_path = path.lower()
+            base = lower_path.rsplit("/", 1)[-1]
+            content = (file_contents.get(path) or "").lower()
+            score = 0
+
+            if base in base_names:
+                score += 40
+            if any(pf.lower() in base for pf in PRIORITY_FILES):
+                score += 20
+            if wanted and any(word in lower_path or word in content for word in wanted):
+                score += 50
+            if any(word in q and word in lower_path for word in re.findall(r"[a-zA-Z_][a-zA-Z0-9_\-]*", q)):
+                score += 25
+            if lower_path.endswith(('.py', '.js', '.ts', '.tsx', '.yml', '.yaml', '.json', '.md')):
+                score += 5
+
+            if score > 0:
+                scored.append((score, path))
+
+        scored.sort(key=lambda item: (-item[0], item[1]))
+        selected = [path for _, path in scored[:limit]]
+
+        # Ensure we have a useful fallback even for vague questions.
+        if len(selected) < min(limit, len(file_list)):
+            for path in file_list:
+                if path not in selected and not self.should_skip(path):
+                    selected.append(path)
+                if len(selected) >= limit:
+                    break
+        return selected[:limit]
+
+    def build_context_bundle(self, question: str, file_list: list, file_contents: dict, limit_chars: int = 60000) -> dict:
+        """Build a RepoMind-style context bundle for Q&A."""
+        selected = self.select_question_files(question, file_list, file_contents, limit=12)
+        chunks = []
+        used_files = []
+        total = 0
+        for path in selected:
+            content = file_contents.get(path)
+            if not content:
+                continue
+            chunk = f"### {path}\n```\n{content[:8000]}\n```"
+            if total + len(chunk) > limit_chars:
+                break
+            chunks.append(chunk)
+            used_files.append(path)
+            total += len(chunk)
+
+        tree = "\n".join(f"- {p}" for p in file_list[:200])
+        if len(file_list) > 200:
+            tree += f"\n... and {len(file_list) - 200} more files"
+
+        return {
+            "tree": tree,
+            "files": used_files,
+            "content": "\n\n".join(chunks),
+        }
 
     def detect_stack(self, file_list: list, file_contents: dict) -> list:
         """Detect the technology stack from file list and contents."""
@@ -904,7 +992,7 @@ See the LICENSE file for details.
         # Prioritize important files
         priority = [f for f in all_files if any(pf in f.split('/')[-1] for pf in PRIORITY_FILES)]
         others = [f for f in all_files if f not in priority]
-        ordered_files = (priority + others)[:MAX_FILES_TO_READ]
+        ordered_files = self.select_question_files("architecture readiness deployment setup", all_files, {}, limit=MAX_FILES_TO_READ)
 
         # Fetch file contents
         file_contents = {}
@@ -925,7 +1013,7 @@ See the LICENSE file for details.
         readiness = self.assess_devops_readiness(all_files, stack, project_type)
 
         # Try AI analysis with configured provider
-        ai_powered = bool(self.ai_provider or (self.api_key and self.project_id))
+        ai_powered = bool((self.ai_provider and self.ai_provider.get_name() != "Rule-based Analysis") or (self.api_key and self.project_id))
         
         # Use provided AI provider or fall back to watsonx
         if self.ai_provider:
@@ -1048,6 +1136,8 @@ Use proper markdown formatting.
             "total_files": len(all_files),
             "analyzed_files": len(file_contents),
             "all_files": all_files,
+            "file_tree": all_files,
+            "context_files": list(file_contents.keys()),
             "ai_powered": ai_powered,
             "stack": stack,
             "project_type": project_type,

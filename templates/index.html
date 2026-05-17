@@ -318,15 +318,15 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
     <div class="input-group">
       <label>AI Provider</label>
       <select id="aiProvider" onchange="toggleAICredentials()" style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; color: var(--text); font-size: 14px; font-family: inherit; outline: none;">
-        <option value="watsonx">🔷 IBM watsonx Granite (Enterprise)</option>
-        <option value="openai">🤖 OpenAI GPT-4 ($0.01/1k tokens)</option>
-        <option value="anthropic">🧠 Anthropic Claude ($0.003/1k tokens)</option>
-        <option value="ollama">💻 Ollama (Local - Free)</option>
-        <option value="rule-based">⚡ Rule-based (Fast - Free)</option>
+        <option value="rule-based" selected>Rule-based (Free - no IBM billing needed)</option>
+        <option value="watsonx">IBM watsonx Granite (Enterprise)</option>
+        <option value="openai">OpenAI GPT-4 ($0.01/1k tokens)</option>
+        <option value="anthropic">Anthropic Claude ($0.003/1k tokens)</option>
+        <option value="ollama">Ollama (Local - Free)</option>
       </select>
     </div>
     
-    <div class="input-group" id="watsonxCreds">
+    <div class="input-group" id="watsonxCreds" style="display: none;">
       <label>IBM watsonx Credentials</label>
       <div class="optional-creds">
         <input type="password" id="apiKey" placeholder="IBM Cloud API Key"/>
@@ -359,6 +359,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
       </div>
     </div>
     
+    <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: -8px 0 16px;">No IBM Cloud billing? Keep <b>Rule-based</b> selected. ShipSage will still analyze repos, answer questions from repo context, and generate DevOps assets.</div>
     <div id="setup-error" style="color: var(--red); font-size: 13px; margin-bottom: 16px; display: none; text-align: center;"></div>
     
     <button class="btn-primary" id="analyzeBtn" onclick="analyze()">
@@ -1750,9 +1751,9 @@ async function askRepo() {
   
   try {
     const aiProvider = document.getElementById('aiProvider').value;
-    const watsonxApiKey = document.getElementById('watsonxApiKey')?.value || '';
-    const watsonxProjectId = document.getElementById('watsonxProjectId')?.value || '';
-    const openaiApiKey = document.getElementById('openaiApiKey')?.value || '';
+    const watsonxApiKey = document.getElementById('apiKey')?.value || '';
+    const watsonxProjectId = document.getElementById('projectId')?.value || '';
+    const openaiApiKey = document.getElementById('openaiKey')?.value || '';
     
     const resp = await fetch('/api/ask', {
       method: 'POST',
@@ -1872,5 +1873,6 @@ function renderModuleBreakdown(breakdown) {
 </script>
 </body>
 </html>
+
 
 

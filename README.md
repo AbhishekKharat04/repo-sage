@@ -67,6 +67,13 @@ Open `http://localhost:8000` and paste a public GitHub repository URL.
 
 IBM credentials are optional. If you provide an IBM Cloud API key and watsonx Project ID, ShipSage uses Granite for deeper analysis. Without credentials, it still detects stack signals and generates the readiness report using deterministic rules.
 
+## Hackathon Notes
+
+- IBM Bob IDE is the required hackathon component. Export the Bob IDE task session report before submission and place it in `bob_sessions/`.
+- IBM watsonx is optional. If you do not have hackathon IBM Cloud access, keep the app on **Rule-based** mode and the core demo still works without billing setup.
+- Do not commit IBM Cloud API keys or watsonx credentials. Use environment variables or local-only secrets instead.
+- See `HACKATHON_SUBMISSION_CHECKLIST.md` and `DATA_SOURCES.md` before final submission.
+
 ## Project Structure
 
 ```text
