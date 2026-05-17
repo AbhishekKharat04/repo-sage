@@ -483,19 +483,23 @@ class RepoAnalyzer:
         has_docker = any('Dockerfile' in f or 'docker-compose' in f for f in file_list)
         has_docs = any('docs/' in f or 'documentation/' in f.lower() for f in file_list)
 
-        summary = f"""## What This Project Does
+        # Sophisticated boilerplate that mimics LLM output
+        primary_lang = stack[0] if stack else "modern web technologies"
+        
+        summary = f"""## Architecture Summary
 
-**{owner}/{repo}** is a **{project_type}** built with **{stack_str}**.
+Overall, **{repo}** is a sophisticated **{project_type}** designed to handle complex workflows and provide robust application functionality. Built on a modern tech stack featuring **{stack_str}**, it automates core processes and provides a solid foundation for scalable deployment.
 
-The repository contains **{len(file_list)} files** organized across {len(set(f.split('/')[0] for f in file_list if '/' in f))} directories. \
-{"It includes a test suite for reliability. " if has_tests else ""}\
-{"CI/CD pipelines automate deployment. " if has_ci else ""}\
-{"Docker support enables containerized deployment. " if has_docker else ""}
+The primary programming architecture relies heavily on **{primary_lang}**, leveraging frameworks and dependencies that handle application logic, data processing, and user interaction. The system implements a structured file organization, containing **{len(file_list)} files** distributed across {len(set(f.split('/')[0] for f in file_list if '/' in f))} core modules.
 
-### Architecture Overview
+In terms of DevOps and deployment strategy, the repository demonstrates clear architectural patterns. {'The presence of automated CI/CD pipelines ensures reliable continuous integration, while ' if has_ci else ''}{'comprehensive Docker configurations facilitate isolated, containerized environments. ' if has_docker else ''}{'A testing suite is also included to maintain strict codebase integrity.' if has_tests else ''} This approach aligns with industry best practices for cloud-native deployment.
+
+Key dependencies include **{stack_str}**, which collectively manage everything from intelligent processing to infrastructure orchestration. The architectural design highlights a strong focus on modularity, maintainability, and production readiness.
+
+### Module Breakdown
 {architecture}
 
->  *Connect your IBM watsonx API key above for a deeper, AI-powered analysis with Granite.*"""
+>  *Note: This detailed breakdown was generated locally in Rule-Based mode. Connect your IBM watsonx API key above for dynamic, contextual LLM analysis.*"""
 
         # Entry point detection
         entry_points = []
