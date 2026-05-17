@@ -442,7 +442,6 @@ class RepoAnalyzer:
 
     def generate_architecture(self, file_list: list) -> str:
         """Generate a text-based architecture diagram from file structure."""
-        # Group files by top-level directory
         dirs = {}
         root_files = []
         for f in file_list:
@@ -467,6 +466,253 @@ class RepoAnalyzer:
                 arch += f"    ... +{len(files)-3} more\n"
         arch += "```"
         return arch
+
+    def describe_file(self, filename: str, content: str, stack: list) -> dict:
+        """Generate a smart description for a single file based on its name and content."""
+        name = filename.lower()
+        basename = filename.split('/')[-1].lower()
+        content_lower = (content or "").lower()
+        desc = ""
+        bullets = []
+
+        # --- Entry Points ---
+        if basename in ('main.py', 'app.py'):
+            desc = f"This file serves as the **entry point** of the application. It initializes components and registers routes."
+            if 'fastapi' in content_lower: bullets.append("Initializes a FastAPI application instance.")
+            if 'flask' in content_lower: bullets.append("Bootstraps the Flask web application.")
+            if 'startup' in content_lower or 'lifespan' in content_lower: bullets.append("Defines startup/shutdown lifecycle hooks.")
+            if 'middleware' in content_lower or 'cors' in content_lower: bullets.append("Configures CORS and request middleware.")
+            if '@app.get' in content_lower or '@app.post' in content_lower: bullets.append("Exposes HTTP API routes and endpoints.")
+            if 'websocket' in content_lower: bullets.append("Handles WebSocket connections for real-time features.")
+        elif basename in ('server.js', 'index.js', 'app.js'):
+            desc = "Main Node.js server file that bootstraps the application and defines routes."
+            if 'express' in content_lower: bullets.append("Configures Express.js middleware and route handlers.")
+            if 'listen' in content_lower: bullets.append("Starts the HTTP server on the configured port.")
+            if 'socket' in content_lower: bullets.append("Integrates real-time WebSocket support.")
+        elif basename == 'manage.py':
+            desc = "Django management entry point for running CLI commands like migrations and dev server."
+
+        # --- Config / Deps ---
+        elif basename == 'requirements.txt':
+            deps = [line.strip() for line in content.splitlines() if line.strip() and not line.startswith('#')]
+            desc = f"Python dependency manifest listing **{len(deps)} packages** required to run the application."
+            if deps: bullets.append(f"Key dependencies: `{'`, `'.join(deps[:6])}`{'...' if len(deps) > 6 else ''}.")
+        elif basename == 'package.json':
+            desc = "Node.js package manifest defining dependencies, scripts, and project metadata."
+            if '"start"' in content_lower: bullets.append("Defines `npm start` script for running the app.")
+            if '"test"' in content_lower: bullets.append("Includes `npm test` script for running the test suite.")
+            if '"build"' in content_lower: bullets.append("Includes a `npm build` script for production bundling.")
+        elif basename in ('.env.example', '.env.template', '.env.sample'):
+            vars_list = [l.split('=')[0].strip() for l in content.splitlines() if '=' in l and not l.strip().startswith('#')]
+            desc = f"Environment variable template documenting **{len(vars_list)} required configuration keys**."
+            if vars_list: bullets.append(f"Variables include: `{'`, `'.join(vars_list[:5])}`.")
+        elif basename in ('dockerfile',):
+            desc = "Multi-stage Dockerfile for building and containerizing the application."
+            if 'from' in content_lower: bullets.append("Uses a base image for the runtime environment.")
+            if 'run pip' in content_lower or 'run npm' in content_lower: bullets.append("Installs application dependencies during the build phase.")
+            if 'expose' in content_lower: bullets.append("Exposes a port for the containerized service.")
+            if 'cmd' in content_lower or 'entrypoint' in content_lower: bullets.append("Defines the default container startup command.")
+        elif basename in ('docker-compose.yml', 'docker-compose.yaml'):
+            desc = "Orchestrates multi-container services for local development and staging environments."
+            if 'redis' in content_lower: bullets.append("Includes a Redis service for caching/session management.")
+            if 'postgres' in content_lower or 'mysql' in content_lower: bullets.append("Includes a database service.")
+            if 'nginx' in content_lower: bullets.append("Configures an Nginx reverse proxy service.")
+        elif basename == 'makefile':
+            targets = re.findall(r'^([a-zA-Z][a-zA-Z0-9_-]+):', content, re.MULTILINE)
+            desc = "Build automation file providing shorthand commands for common developer workflows."
+            if targets: bullets.append(f"Defines targets: `{'`, `'.join(targets[:6])}`.")
+
+        # --- CI/CD ---
+        elif '.github/workflows' in name:
+            desc = "GitHub Actions CI/CD workflow that automates build, test, and deployment pipelines on push/PR."
+            if 'push' in content_lower: bullets.append("Triggers automatically on `git push` events.")
+            if 'docker' in content_lower: bullets.append("Builds and pushes Docker images to a container registry.")
+            if 'test' in content_lower: bullets.append("Runs the automated test suite on every commit.")
+            if 'deploy' in content_lower: bullets.append("Deploys the application to the target environment.")
+
+        # --- Python modules ---
+        elif basename.endswith('.py'):
+            module_name = basename.replace('.py', '')
+            if 'analyzer' in module_name or 'analyse' in module_name:
+                desc = f"Core analysis module that implements the logic for parsing and evaluating repositories."
+                if 'async def' in content_lower: bullets.append("Uses async functions for non-blocking API calls.")
+                if 'class' in content_lower: bullets.append(f"Defines classes encapsulating the analysis logic.")
+            elif 'generator' in module_name or 'gen_' in module_name:
+                desc = f"Generator module responsible for producing configuration artifacts from analysis results."
+            elif 'route' in module_name or 'api' in module_name or 'view' in module_name:
+                desc = f"Defines HTTP API routes and request handlers for the `{module_name}` domain."
+            elif 'model' in module_name or 'schema' in module_name:
+                desc = f"Data model/schema definitions used for validation and ORM mapping."
+            elif 'util' in module_name or 'helper' in module_name:
+                desc = f"Utility module providing shared helper functions used across the codebase."
+            elif 'test' in module_name or 'spec' in module_name:
+                desc = f"Automated test suite for verifying the correctness of the application logic."
+            elif 'auth' in module_name or 'security' in module_name:
+                desc = f"Authentication and authorization module managing user identity and access control."
+            elif 'config' in module_name or 'setting' in module_name:
+                desc = f"Application configuration loader — reads environment variables and sets runtime defaults."
+            else:
+                classes = re.findall(r'^class\s+(\w+)', content, re.MULTILINE)
+                functions = re.findall(r'^(?:async )?def\s+(\w+)', content, re.MULTILINE)
+                desc = f"Python module `{basename}` containing application logic."
+                if classes: bullets.append(f"Defines classes: `{'`, `'.join(classes[:4])}`.")
+                if functions: bullets.append(f"Exposes functions: `{'`, `'.join(functions[:5])}`.")
+
+        # --- JS/TS modules ---
+        elif basename.endswith(('.js', '.ts', '.jsx', '.tsx')):
+            module_name = basename.rsplit('.', 1)[0]
+            if 'component' in name or basename[0].isupper():
+                desc = f"React component `{basename}` rendering UI elements for the application."
+            elif 'hook' in name:
+                desc = f"Custom React hook encapsulating reusable stateful logic."
+            elif 'util' in name or 'helper' in name:
+                desc = f"Utility module providing shared helper functions."
+            elif 'route' in name or 'api' in name:
+                desc = f"Defines routing logic and API handler functions."
+            else:
+                desc = f"JavaScript/TypeScript module `{basename}` implementing application logic."
+
+        # --- Web / Docs ---
+        elif basename == 'readme.md':
+            desc = "Project documentation providing an overview, setup instructions, and usage examples."
+        elif basename.endswith('.html'):
+            desc = f"HTML template `{basename}` — defines the page structure and UI layout served to clients."
+            if 'chart' in content_lower or 'canvas' in content_lower: bullets.append("Includes Chart.js/Canvas-based data visualizations.")
+            if 'websocket' in content_lower: bullets.append("Connects to real-time WebSocket endpoints.")
+        elif 'prometheus' in name:
+            desc = "Prometheus monitoring configuration defining scrape targets and alerting rules."
+        elif 'nginx' in name:
+            desc = "Nginx reverse proxy configuration routing traffic to the application backend."
+
+        if not desc:
+            desc = f"Module `{basename}` implementing supporting functionality for the application."
+
+        return {"file": filename, "description": desc, "bullets": bullets}
+
+    def generate_module_breakdown(self, file_list: list, file_contents: dict, stack: list) -> list:
+        """
+        Generate a detailed, per-module breakdown similar to RepoMind's LLM output.
+        Groups files by top-level directory and generates smart descriptions.
+        """
+        dirs = {}
+        root_files = []
+        for f in file_list:
+            parts = f.split('/')
+            if len(parts) == 1:
+                root_files.append(f)
+            else:
+                top_dir = parts[0]
+                if top_dir not in dirs:
+                    dirs[top_dir] = []
+                dirs[top_dir].append(f)
+
+        modules = []
+
+        # Root-level notable files first
+        notable_roots = [f for f in root_files if any(
+            pf.lower() in f.lower() for pf in PRIORITY_FILES
+        )]
+        for f in notable_roots[:5]:
+            content = file_contents.get(f, "")
+            info = self.describe_file(f, content, stack)
+            modules.append({
+                "name": f,
+                "type": "file",
+                "description": info["description"],
+                "bullets": info["bullets"],
+                "files": []
+            })
+
+        # Directories
+        dir_descriptions = {
+            'generators': ("Contains modules responsible for generating DevOps artifacts and configuration files.",
+                          ["Produces Dockerfiles, Kubernetes manifests, CI/CD pipelines, Terraform configs.",
+                           "Each subdirectory or module targets a specific infrastructure component.",
+                           "Output files are tailored to the analyzed repository's detected tech stack."]),
+            'templates': ("Houses HTML templates served by the web server to render the user interface.",
+                         ["Templates are dynamically rendered using the Jinja2 or similar engine.",
+                          "Includes the main dashboard, analysis views, and collaboration pages."]),
+            'monitoring': ("Contains monitoring stack configurations for observability in production.",
+                          ["Includes Prometheus scrape configs and alerting rules.",
+                           "Designed to track application health, latency, and error rates."]),
+            '.github': ("GitHub-specific configuration including Actions CI/CD workflow definitions.",
+                       ["Workflow files automate build, test, and deployment pipelines.",
+                        "Triggers on push, pull_request, or scheduled events."]),
+            'tests': ("Automated test suite ensuring correctness and reliability of the application.",
+                     ["Unit tests verify individual functions and modules in isolation.",
+                      "Integration tests validate the interaction between components."]),
+            'src': ("Core source code directory containing the main application logic.",
+                   ["Organized into sub-modules by domain responsibility.",
+                    "Entry points, routes, and service layers live here."]),
+            'api': ("REST API layer defining endpoints, request/response schemas, and routing.",
+                   ["Implements HTTP handlers for client-server communication.",
+                    "Includes validation middleware and error handling."]),
+            'config': ("Application configuration files and environment-specific settings.",
+                      ["Loads environment variables to configure runtime behaviour.",
+                       "Keeps secrets and credentials out of the main codebase."]),
+            'scripts': ("Utility and automation scripts for common developer and deployment tasks.",
+                       ["Includes setup, migration, and deployment helper scripts.",
+                        "Reduces manual steps in development and CI workflows."]),
+            'docs': ("Project documentation, architectural decision records, and usage guides.",
+                    ["Helps onboard new contributors and explains design decisions.",
+                     "May include API reference docs, diagrams, and tutorials."]),
+        }
+
+        for dir_name, dir_files in sorted(dirs.items()):
+            dir_lower = dir_name.lower()
+            # Check for a known description
+            known = None
+            for key, val in dir_descriptions.items():
+                if key in dir_lower:
+                    known = val
+                    break
+
+            sub_modules = []
+            for f in dir_files[:6]:
+                content = file_contents.get(f, "")
+                info = self.describe_file(f, content, stack)
+                if info["description"]:
+                    sub_modules.append({
+                        "file": f.split('/')[-1],
+                        "description": info["description"],
+                        "bullets": info["bullets"]
+                    })
+
+            if known:
+                modules.append({
+                    "name": dir_name,
+                    "type": "directory",
+                    "description": known[0],
+                    "bullets": known[1],
+                    "files": sub_modules
+                })
+            else:
+                # Auto-generate from file contents
+                modules.append({
+                    "name": dir_name,
+                    "type": "directory",
+                    "description": f"Module directory `{dir_name}/` containing {len(dir_files)} files that implement supporting functionality.",
+                    "bullets": [f"`{f.split('/')[-1]}` — {self.describe_file(f, file_contents.get(f,''), stack)['description'][:80]}..." for f in dir_files[:3]],
+                    "files": sub_modules
+                })
+
+        # Module relationship summary
+        relationships = []
+        module_names = [m["name"] for m in modules]
+        entry = next((m for m in module_names if m in ('main.py', 'app.py', 'index.js', 'server.js')), None)
+        if entry:
+            relationships.append(f"`{entry}` acts as the **central nervous system**, integrating and invoking all other modules.")
+        for m in module_names:
+            if 'analyzer' in m.lower():
+                relationships.append(f"`{m}` provides the foundation for understanding repository state and readiness.")
+            elif 'generator' in m.lower():
+                relationships.append(f"`{m}` uses analysis results to tailor DevOps artifacts to the specific tech stack.")
+            elif 'template' in m.lower():
+                relationships.append(f"`{m}` presents findings and generated configs through the web dashboard.")
+            elif 'monitoring' in m.lower():
+                relationships.append(f"`{m}` enables observability and health tracking in production deployments.")
+
+        return {"modules": modules, "relationships": relationships}
 
     def generate_fallback_analysis(self, owner: str, repo: str, file_list: list, file_contents: dict) -> dict:
         """Smart rule-based analysis when watsonx is not configured."""
@@ -629,12 +875,15 @@ See the LICENSE file for details.
 ---
 *Generated by [RepoSage](https://github.com/AbhishekKharat04/repo-sage)  AI-powered repository onboarding*"""
 
+        module_breakdown = self.generate_module_breakdown(file_list, file_contents, stack)
+
         return {
             "summary": summary,
             "starting_guide": starting_guide,
             "critical_files": critical_files,
             "danger_zones": danger_zones,
             "readme": readme,
+            "module_breakdown": module_breakdown,
             "ai_powered": False
         }
 
@@ -774,6 +1023,7 @@ Use proper markdown formatting.
                 critical_files = critical_files or fallback["critical_files"]
                 danger_zones = danger_zones or fallback["danger_zones"]
                 readme = readme or fallback["readme"]
+            module_breakdown = self.generate_module_breakdown(all_files, file_contents, stack)
         else:
             fallback = self.generate_fallback_analysis(owner, repo, all_files, file_contents)
             summary = fallback["summary"]
@@ -781,6 +1031,11 @@ Use proper markdown formatting.
             critical_files = fallback["critical_files"]
             danger_zones = fallback["danger_zones"]
             readme = fallback["readme"]
+            module_breakdown = fallback["module_breakdown"]
+
+        # Store file_contents on self so /api/ask can use it for context
+        self._last_file_contents = file_contents
+        self._last_file_list = all_files
 
         elapsed = round(time.time() - start_time, 1)
         
@@ -803,7 +1058,8 @@ Use proper markdown formatting.
             "starting_guide": starting_guide,
             "critical_files": critical_files,
             "danger_zones": danger_zones,
-            "readme": readme
+            "readme": readme,
+            "module_breakdown": module_breakdown
         }
     
     def generate_pipeline_stages(self, file_list: list, stack: list, readiness: dict) -> list:

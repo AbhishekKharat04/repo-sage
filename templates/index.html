@@ -646,7 +646,13 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
         <div class="editor-header">
           <div class="editor-title"><i></i> AI Codebase Analysis</div>
         </div>
-        <div class="card md-prose" id="content-summary"></div>
+        <!-- Architecture Summary -->
+        <div class="card md-prose" id="content-summary" style="margin-bottom: 24px;"></div>
+        <!-- Module Breakdown -->
+        <div class="card" id="module-breakdown-card" style="display:none;">
+          <div class="card-title">🧩 Module Breakdown</div>
+          <div id="module-breakdown-content" style="margin-top: 12px;"></div>
+        </div>
       </div>
       
       <!-- Cost Estimation View -->
@@ -1166,6 +1172,11 @@ function renderDashboard(d) {
   
   // Summary Markdown
   document.getElementById('content-summary').innerHTML = marked.parse(d.summary || '*No analysis available*');
+
+  // Module Breakdown
+  if (d.module_breakdown) {
+    renderModuleBreakdown(d.module_breakdown);
+  }
   
   // Config Editors
   const configs = ['dockerfile', 'compose', 'kubernetes', 'cicd', 'aws_terraform', 'monitoring', 'env_config'];
@@ -1783,6 +1794,81 @@ async function askRepo() {
 
 // Render history on page load
 window.addEventListener('load', () => renderProjectHistory());
+
+function renderModuleBreakdown(breakdown) {
+  const card = document.getElementById('module-breakdown-card');
+  const container = document.getElementById('module-breakdown-content');
+  if (!card || !container || !breakdown || !breakdown.modules || breakdown.modules.length === 0) return;
+
+  card.style.display = 'block';
+
+  const modules = breakdown.modules;
+  const relationships = breakdown.relationships || [];
+
+  let html = '<ol style="margin: 0; padding-left: 20px; display: grid; gap: 20px;">';
+
+  modules.forEach((mod, idx) => {
+    const icon = mod.type === 'directory' ? '📁' : '📄';
+    html += `
+      <li style="padding-left: 4px;">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+          <span style="font-size: 15px; font-weight: 700; color: var(--text);">${icon} <code style="background: var(--panel); padding: 2px 8px; border-radius: 4px; font-size: 13px; color: var(--primary);">${mod.name}${mod.type === 'directory' ? '/' : ''}</code></span>
+        </div>
+        <div style="margin-left: 4px;">
+          <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6; margin: 0 0 8px 0;">${mod.description}</p>
+    `;
+
+    if (mod.bullets && mod.bullets.length > 0) {
+      html += '<ul style="margin: 0; padding-left: 20px; display: grid; gap: 4px;">';
+      mod.bullets.forEach(b => {
+        html += `<li style="font-size: 13px; color: var(--text-muted); line-height: 1.5; list-style-type: disc;">${b}</li>`;
+      });
+      html += '</ul>';
+    }
+
+    if (mod.files && mod.files.length > 0) {
+      html += '<div style="margin-top: 10px; display: grid; gap: 8px;">';
+      mod.files.forEach(f => {
+        html += `
+          <div style="padding: 10px 14px; background: rgba(0,0,0,0.15); border-left: 3px solid var(--primary); border-radius: 6px;">
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--text);">
+              <code style="background: var(--panel); padding: 1px 6px; border-radius: 3px; font-size: 12px; color: var(--primary);">${f.file}</code>
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">${f.description}</div>
+        `;
+        if (f.bullets && f.bullets.length > 0) {
+          html += '<ul style="margin: 6px 0 0 16px; padding: 0; display: grid; gap: 3px;">';
+          f.bullets.forEach(b => {
+            html += `<li style="font-size: 12px; color: var(--text-muted); list-style-type: square;">${b}</li>`;
+          });
+          html += '</ul>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    html += '</div></li>';
+  });
+
+  html += '</ol>';
+
+  // Relationships section
+  if (relationships.length > 0) {
+    html += `
+      <div style="margin-top: 24px; padding: 16px; background: rgba(59,130,246,0.05); border: 1px solid rgba(59,130,246,0.2); border-radius: 10px;">
+        <div style="font-size: 14px; font-weight: 700; margin-bottom: 10px; color: var(--text);">🔗 Module Relationships</div>
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-muted);">The relationships among these modules are collaborative:</div>
+        <ul style="margin: 0; padding-left: 20px; display: grid; gap: 6px;">
+          ${relationships.map(r => `<li style="font-size: 13px; color: var(--text-muted); line-height: 1.6; list-style-type: disc;">${r}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+}
+
 </script>
 </body>
 </html>

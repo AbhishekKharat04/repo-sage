@@ -240,44 +240,144 @@ async def ask_repo(data: AskRequest):
             ai_provider = AIProviderFactory.create_provider("ollama", model=data.ollama_model, endpoint=data.ollama_endpoint)
         else:
             ai_provider = AIProviderFactory.create_provider("rule-based")
-            
+
         github_token = data.github_token or os.getenv("GITHUB_TOKEN", "")
-        analyzer = RepoAnalyzer(api_key=data.watsonx_api_key, project_id=data.watsonx_project_id, github_token=github_token, ai_provider=ai_provider)
-        
-        # Try to get repo info and README for context
-        try:
-            owner, repo = analyzer.parse_repo_url(data.repo_url)
-            readme_content = await analyzer.get_file_content(owner, repo, "README.md")
-        except Exception:
-            readme_content = ""
-            
-        if readme_content.startswith("[File too large") or "Sample project file" in readme_content:
-            readme_content = "No README available or offline mode active."
-            
-        prompt = f"""You are a helpful DevOps and architecture expert analyzing a GitHub repository.
+        analyzer = RepoAnalyzer(
+            api_key=data.watsonx_api_key,
+            project_id=data.watsonx_project_id,
+            github_token=github_token,
+            ai_provider=ai_provider
+        )
+
+        # Fetch multiple key files for rich context
+        context_parts = []
+        owner, repo_name = analyzer.parse_repo_url(data.repo_url)
+        analyzer.offline_mode = False
+
+        key_files = [
+            "README.md", "main.py", "app.py", "requirements.txt",
+            "package.json", "analyzer.py", "Dockerfile", ".env.example"
+        ]
+        for kf in key_files:
+            try:
+                content = await analyzer.get_file_content(owner, repo_name, kf)
+                if content and "Sample project file" not in content and not content.startswith("[File too large"):
+                    context_parts.append(f"=== {kf} ===\n{content[:1200]}")
+            except Exception:
+                pass
+
+        repo_context = "\n\n".join(context_parts[:5]) if context_parts else "No file content available."
+
+        # If LLM is available, use it with rich context
+        if data.ai_provider != "rule-based":
+            prompt = f"""You are a senior DevOps and software architecture expert analyzing a GitHub repository.
+
 Repository: {data.repo_url}
 
-README Context:
-{readme_content[:1500]}
+File Contents:
+{repo_context}
 
 User Question: {data.question}
 
-Answer the user's question clearly and concisely based on the repository context above. If you don't know the answer, say so politely."""
+Answer the question clearly and concisely based on the actual file contents above. Reference specific files, classes, or functions where relevant. If the information isn't in the provided files, say so honestly."""
 
-        answer = await ai_provider.analyze(prompt)
-        
-        if not answer:
-            # Fallback for rule-based or if AI fails
-            question_lower = data.question.lower()
-            if "readiness" in question_lower or "score" in question_lower:
-                answer = "ShipSage evaluates readiness based on the presence of DevOps signals such as Dockerfiles, CI/CD workflows, Infrastructure as Code (Terraform/K8s), testing suites, and security configurations. These are weighted to generate a score out of 100."
-            elif "architecture" in question_lower:
-                answer = "Based on a quick scan, this repository appears to use a modern framework structure. Please configure an API key (Watsonx, OpenAI, Anthropic) to get a deep AI-powered architectural breakdown."
-            else:
-                answer = f"I am currently running in **Rule-Based (Fast - Free)** mode without an LLM backend, so I cannot dynamically read the codebase to answer: *'{data.question}'*.\n\nPlease select **IBM Watsonx, OpenAI, or Anthropic** in the top bar to enable AI-powered Q&A capabilities."
-                
+            answer = await ai_provider.analyze(prompt)
+            if answer:
+                return {"answer": answer}
+
+        # Intelligent rule-based fallback using actual file content
+        q = data.question.lower()
+        ctx = repo_context.lower()
+
+        # Detect what's in the repo from actual content
+        has_fastapi = "fastapi" in ctx
+        has_flask = "flask" in ctx
+        has_express = "express" in ctx
+        has_react = "react" in ctx
+        has_docker = "dockerfile" in ctx or "docker-compose" in ctx
+        has_postgres = "postgres" in ctx or "postgresql" in ctx
+        has_redis = "redis" in ctx
+        has_tests = "pytest" in ctx or "unittest" in ctx or "jest" in ctx
+        has_ci = ".github/workflows" in ctx or "github actions" in ctx
+
+        # Figure out the framework
+        framework = "FastAPI" if has_fastapi else "Flask" if has_flask else "Express.js" if has_express else "the framework"
+        db = "PostgreSQL" if has_postgres else "Redis" if has_redis else "the configured database"
+
+        if any(w in q for w in ["readiness", "score", "how is it calculated", "accuracy"]):
+            answer = (
+                f"**ShipSage calculates readiness** by scanning the repository's file tree for DevOps signals:\n\n"
+                f"- **Tests** (+15 pts) — presence of test files or `pytest`/`jest` configs\n"
+                f"- **CI/CD** (+20 pts) — GitHub Actions workflows or Jenkinsfile\n"
+                f"- **Docker** (+15 pts) — Dockerfile or docker-compose.yml\n"
+                f"- **Env Template** (+8 pts) — `.env.example` or `.env.template`\n"
+                f"- **Docs** (+10 pts) — README.md or docs/ directory\n"
+                f"- **Monitoring** (+12 pts) — Prometheus, Grafana, or ELK configs\n"
+                f"- **Security** (+10 pts) — Snyk, Trivy, or security scan configs\n"
+                f"- **Infra as Code** (+10 pts) — Terraform, Kubernetes, or Helm charts\n\n"
+                f"Scores above 90 = Enterprise Grade. This repo currently has: "
+                f"{'✅ Tests' if has_tests else '❌ Tests'}, "
+                f"{'✅ Docker' if has_docker else '❌ Docker'}, "
+                f"{'✅ CI/CD' if has_ci else '❌ CI/CD'}."
+            )
+        elif any(w in q for w in ["deploy", "run", "local", "setup", "install", "start"]):
+            answer = (
+                f"**To run this project locally:**\n\n"
+                f"1. Clone the repo: `git clone {data.repo_url}`\n"
+                f"2. Install dependencies: `{'pip install -r requirements.txt' if 'requirements.txt' in repo_context else 'npm install' if 'package.json' in repo_context else 'install dependencies'}`\n"
+                f"3. Copy environment config: `cp .env.example .env` and fill in your values\n"
+                f"{'4. Start with Docker: `docker-compose up --build`' if has_docker else f'4. Run the app: `python main.py` or `uvicorn main:app --reload`' if has_fastapi else '4. Run the entry point file'}\n\n"
+                f"{'💡 **Tip:** A `docker-compose.yml` is present — use `docker-compose up` for the easiest local setup.' if has_docker else ''}"
+            )
+        elif any(w in q for w in ["architecture", "structure", "how does it work", "what does it do", "overview"]):
+            answer = (
+                f"**Architecture Overview:**\n\n"
+                f"This is a **{framework}**-based {'web application' if has_react else 'API/backend service'} "
+                f"{'with a React frontend' if has_react else ''}.\n\n"
+                f"- **Entry Point:** `main.py` or `app.py` — initializes {framework} and registers routes\n"
+                f"- **API Layer:** HTTP endpoints handle incoming requests and return structured responses\n"
+                f"{'- **Database:** Uses ' + db + ' for persistent storage' if has_postgres or has_redis else ''}\n"
+                f"{'- **Cache:** Redis for session/caching layer' if has_redis else ''}\n"
+                f"{'- **Containerized:** Docker + docker-compose for isolated environments' if has_docker else ''}\n\n"
+                f"The modules are organized by responsibility — analyzers for input processing, generators for output artifacts, and templates for the UI layer."
+            )
+        elif any(w in q for w in ["tech stack", "technology", "language", "framework", "dependencies"]):
+            answer = (
+                f"**Tech Stack detected from file contents:**\n\n"
+                f"{'- 🐍 Python + FastAPI (web framework)' + chr(10) if has_fastapi else ''}"
+                f"{'- 🐍 Python + Flask (web framework)' + chr(10) if has_flask else ''}"
+                f"{'- 🟨 JavaScript + Express.js' + chr(10) if has_express else ''}"
+                f"{'- ⚛️ React (frontend)' + chr(10) if has_react else ''}"
+                f"{'- 🐳 Docker + Docker Compose' + chr(10) if has_docker else ''}"
+                f"{'- 🐘 PostgreSQL (database)' + chr(10) if has_postgres else ''}"
+                f"{'- 🔴 Redis (cache/sessions)' + chr(10) if has_redis else ''}"
+                f"{'- 🧪 Automated testing suite' + chr(10) if has_tests else ''}"
+                f"{'- ⚙️ GitHub Actions CI/CD' + chr(10) if has_ci else ''}\n"
+                f"Check `requirements.txt` or `package.json` for the full dependency list."
+            )
+        elif any(w in q for w in ["blocker", "missing", "problem", "issue", "what needs"]):
+            blockers = []
+            if not has_tests: blockers.append("❌ No test suite detected — add pytest or jest")
+            if not has_ci: blockers.append("❌ No CI/CD pipeline — add GitHub Actions workflow")
+            if not has_docker: blockers.append("❌ No Docker config — add Dockerfile and docker-compose.yml")
+            answer = (
+                f"**Deployment Blockers detected:**\n\n"
+                + ("\n".join(blockers) if blockers else "✅ No critical blockers found! The repo is well-configured.")
+                + f"\n\nCheck the **Overview** tab in ShipSage for a full Deployment Readiness breakdown."
+            )
+        else:
+            answer = (
+                f"Based on the repository files I can read, here's what I found about **'{data.question}'**:\n\n"
+                f"This repository uses **{framework}** as its core framework. "
+                f"{'It has Docker containerization support. ' if has_docker else ''}"
+                f"{'Tests are present to ensure reliability. ' if has_tests else ''}"
+                f"{'CI/CD is configured via GitHub Actions. ' if has_ci else ''}\n\n"
+                f"For a deeper, contextual answer I'd recommend connecting an **IBM Watsonx or OpenAI** API key — "
+                f"this will let ShipSage read the actual code logic and give you a precise, file-specific response."
+            )
+
         return {"answer": answer}
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
